@@ -2,106 +2,78 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Biometric Auth</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>בקרת גישה</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="auth-body">
+<body class="access-body">
     <div class="container">
         <header>
-            <h1>אימות ביומטרי</h1>
-            <p class="subtitle">BIOMETRIC AUTHENTICATION</p>
+            <h1>בקרת גישה</h1>
+            <p class="subtitle">FACE RECOGNITION ACCESS CONTROL</p>
         </header>
 
-        <div class="stage-indicator">
-            <div class="step active" data-step="1"><span>1</span><label>אצבע</label></div>
-            <div class="step-line"></div>
-            <div class="step" data-step="2"><span>2</span><label>פנים</label></div>
-            <div class="step-line"></div>
-            <div class="step" data-step="3"><span>3</span><label>אושר</label></div>
+        <div id="loading" class="loading-bar">
+            <div class="loading-spinner"></div>
+            <span id="loading-text">טוען מודלים...</span>
         </div>
 
-        <!-- STAGE 1: FINGERPRINT -->
-        <section id="stage-fingerprint" class="stage active">
-            <div class="scan-title">שלב 1 — טביעת אצבע</div>
-            <p class="scan-desc">הנח אצבע על החיישן והחזק</p>
+        <!-- ENROLLMENT -->
+        <section class="panel">
+            <h2 class="panel-title">אנשים מורשים</h2>
 
-            <div class="fp-pad" id="fp-pad">
-                <svg class="fp-progress" viewBox="0 0 200 200">
-                    <circle cx="100" cy="100" r="92" class="fp-track"/>
-                    <circle cx="100" cy="100" r="92" class="fp-bar" id="fp-bar"/>
-                </svg>
-                <svg class="fp-icon" viewBox="0 0 100 100" aria-hidden="true">
-                    <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
-                        <path d="M30,60 Q30,30 50,30 Q70,30 70,60"/>
-                        <path d="M36,68 Q36,36 50,36 Q64,36 64,60 Q64,68 60,72"/>
-                        <path d="M42,74 Q42,42 50,42 Q58,42 58,60 Q58,74 52,80"/>
-                        <path d="M48,80 Q48,48 50,48 Q52,48 52,60 Q52,80 46,86"/>
-                        <path d="M28,72 Q26,80 24,86"/>
-                        <path d="M72,72 Q74,80 76,86"/>
-                    </g>
-                </svg>
-                <div class="fp-pulse"></div>
+            <div class="upload-row">
+                <input type="text" id="person-name" placeholder="שם מלא" maxlength="40">
+                <label for="file-input" class="file-label">
+                    <span class="plus">+</span>
+                    <span>בחר תמונה</span>
+                </label>
+                <input type="file" id="file-input" accept="image/*" hidden>
             </div>
+            <p class="hint" id="enroll-hint">הכנס שם ולחץ לבחירת תמונה. התמונה תעובד ותישמר בדפדפן בלבד.</p>
 
-            <p class="fp-hint" id="fp-hint">לחץ והחזק 2 שניות</p>
+            <div class="enrolled-list" id="enrolled-list">
+                <p class="empty-msg">עדיין לא נוספו אנשים — כל פנים יזוהו כ"לא מורשה".</p>
+            </div>
         </section>
 
-        <!-- STAGE 2: FACE SCAN -->
-        <section id="stage-face" class="stage">
-            <div class="scan-title">שלב 2 — סריקת פנים</div>
-            <p class="scan-desc">הסתכל ישר למצלמה</p>
+        <!-- SCANNER -->
+        <section class="panel">
+            <h2 class="panel-title">סריקה חיה</h2>
 
-            <div class="video-container face-container">
+            <div class="status-banner" id="status-banner" data-state="idle">
+                <div class="status-pulse"></div>
+                <div class="status-text" id="status-text">לחץ "הפעל סריקה"</div>
+                <div class="status-sub" id="status-sub"></div>
+            </div>
+
+            <div class="video-container scan-container">
                 <video id="video" autoplay playsinline muted></video>
                 <canvas id="canvas"></canvas>
-                <div class="face-frame"></div>
                 <div class="scanline"></div>
                 <div class="corner top-left"></div>
                 <div class="corner top-right"></div>
                 <div class="corner bottom-left"></div>
                 <div class="corner bottom-right"></div>
-
-                <div class="countdown-ring">
-                    <svg viewBox="0 0 120 120">
-                        <circle cx="60" cy="60" r="54" class="cd-track"/>
-                        <circle cx="60" cy="60" r="54" class="cd-bar" id="cd-bar"/>
+                <div class="video-placeholder" id="video-placeholder">
+                    <svg viewBox="0 0 100 100" width="80" height="80" aria-hidden="true">
+                        <circle cx="50" cy="40" r="16" fill="none" stroke="currentColor" stroke-width="3"/>
+                        <path d="M20,85 Q20,60 50,60 Q80,60 80,85" fill="none" stroke="currentColor" stroke-width="3"/>
                     </svg>
-                    <div class="cd-text" id="cd-text">4.0</div>
-                </div>
-
-                <div class="face-hud">
-                    <div class="face-hud-item">
-                        <span class="dot" id="face-dot"></span>
-                        <span id="face-status">מחפש פנים...</span>
-                    </div>
-                </div>
-
-                <div class="warning-overlay hidden" id="warning">
-                    <div class="warning-icon">!</div>
-                    <div class="warning-text">נא לא לכסות את הפנים</div>
+                    <p>המצלמה כבויה</p>
                 </div>
             </div>
-        </section>
 
-        <!-- STAGE 3: SUCCESS -->
-        <section id="stage-success" class="stage">
-            <div class="success-card">
-                <svg class="success-check" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="45" class="sc-ring"/>
-                    <path d="M30,52 L45,67 L72,38" class="sc-check"/>
-                </svg>
-                <h2>האימות הצליח</h2>
-                <p>זיהוי הושלם בהצלחה</p>
-                <button id="restart-btn" class="btn btn-primary">סרוק שוב</button>
+            <div class="controls">
+                <button id="start-btn" class="btn btn-primary" disabled>הפעל סריקה</button>
+                <button id="stop-btn" class="btn btn-secondary" disabled>עצור</button>
             </div>
         </section>
 
         <div id="error" class="error hidden"></div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/face_detection.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="auth.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
