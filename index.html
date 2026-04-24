@@ -2,70 +2,106 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Tracking AR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Biometric Auth</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="auth-body">
     <div class="container">
         <header>
-            <h1>מעקב יד בזמן אמת</h1>
-            <p class="subtitle">Hand Tracking AR System</p>
+            <h1>אימות ביומטרי</h1>
+            <p class="subtitle">BIOMETRIC AUTHENTICATION</p>
         </header>
 
-        <div class="video-container">
-            <video id="video" autoplay playsinline></video>
-            <canvas id="canvas"></canvas>
-            <div class="scanline"></div>
-            <div class="corner top-left"></div>
-            <div class="corner top-right"></div>
-            <div class="corner bottom-left"></div>
-            <div class="corner bottom-right"></div>
-            <div class="hud">
-                <div class="hud-item">
-                    <span class="label">STATUS:</span>
-                    <span id="status" class="value">INITIALIZING...</span>
-                </div>
-                <div class="hud-item">
-                    <span class="label">HANDS:</span>
-                    <span id="hand-count" class="value">0</span>
-                </div>
-                <div class="hud-item">
-                    <span class="label">FPS:</span>
-                    <span id="fps" class="value">0</span>
-                </div>
-            </div>
+        <div class="stage-indicator">
+            <div class="step active" data-step="1"><span>1</span><label>אצבע</label></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="2"><span>2</span><label>פנים</label></div>
+            <div class="step-line"></div>
+            <div class="step" data-step="3"><span>3</span><label>אושר</label></div>
         </div>
 
-        <div class="controls">
-            <button id="start-btn" class="btn btn-primary">הפעל מצלמה</button>
-            <button id="stop-btn" class="btn btn-secondary" disabled>עצור</button>
-            <div class="options">
-                <label>
-                    <input type="checkbox" id="mirror" checked>
-                    <span>תמונת מראה</span>
-                </label>
-                <label>
-                    <input type="checkbox" id="show-landmarks" checked>
-                    <span>נקודות ציון</span>
-                </label>
-                <label>
-                    <input type="checkbox" id="show-connections" checked>
-                    <span>קווי חיבור</span>
-                </label>
+        <!-- STAGE 1: FINGERPRINT -->
+        <section id="stage-fingerprint" class="stage active">
+            <div class="scan-title">שלב 1 — טביעת אצבע</div>
+            <p class="scan-desc">הנח אצבע על החיישן והחזק</p>
+
+            <div class="fp-pad" id="fp-pad">
+                <svg class="fp-progress" viewBox="0 0 200 200">
+                    <circle cx="100" cy="100" r="92" class="fp-track"/>
+                    <circle cx="100" cy="100" r="92" class="fp-bar" id="fp-bar"/>
+                </svg>
+                <svg class="fp-icon" viewBox="0 0 100 100" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                        <path d="M30,60 Q30,30 50,30 Q70,30 70,60"/>
+                        <path d="M36,68 Q36,36 50,36 Q64,36 64,60 Q64,68 60,72"/>
+                        <path d="M42,74 Q42,42 50,42 Q58,42 58,60 Q58,74 52,80"/>
+                        <path d="M48,80 Q48,48 50,48 Q52,48 52,60 Q52,80 46,86"/>
+                        <path d="M28,72 Q26,80 24,86"/>
+                        <path d="M72,72 Q74,80 76,86"/>
+                    </g>
+                </svg>
+                <div class="fp-pulse"></div>
             </div>
-        </div>
+
+            <p class="fp-hint" id="fp-hint">לחץ והחזק 2 שניות</p>
+        </section>
+
+        <!-- STAGE 2: FACE SCAN -->
+        <section id="stage-face" class="stage">
+            <div class="scan-title">שלב 2 — סריקת פנים</div>
+            <p class="scan-desc">הסתכל ישר למצלמה</p>
+
+            <div class="video-container face-container">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="canvas"></canvas>
+                <div class="face-frame"></div>
+                <div class="scanline"></div>
+                <div class="corner top-left"></div>
+                <div class="corner top-right"></div>
+                <div class="corner bottom-left"></div>
+                <div class="corner bottom-right"></div>
+
+                <div class="countdown-ring">
+                    <svg viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="54" class="cd-track"/>
+                        <circle cx="60" cy="60" r="54" class="cd-bar" id="cd-bar"/>
+                    </svg>
+                    <div class="cd-text" id="cd-text">4.0</div>
+                </div>
+
+                <div class="face-hud">
+                    <div class="face-hud-item">
+                        <span class="dot" id="face-dot"></span>
+                        <span id="face-status">מחפש פנים...</span>
+                    </div>
+                </div>
+
+                <div class="warning-overlay hidden" id="warning">
+                    <div class="warning-icon">!</div>
+                    <div class="warning-text">נא לא לכסות את הפנים</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STAGE 3: SUCCESS -->
+        <section id="stage-success" class="stage">
+            <div class="success-card">
+                <svg class="success-check" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" class="sc-ring"/>
+                    <path d="M30,52 L45,67 L72,38" class="sc-check"/>
+                </svg>
+                <h2>האימות הצליח</h2>
+                <p>זיהוי הושלם בהצלחה</p>
+                <button id="restart-btn" class="btn btn-primary">סרוק שוב</button>
+            </div>
+        </section>
 
         <div id="error" class="error hidden"></div>
-
-        <div class="nav-links">
-            <a href="auth.html">אימות ביומטרי ←</a>
-        </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229/face_detection.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="script.js"></script>
+    <script src="auth.js"></script>
 </body>
 </html>
