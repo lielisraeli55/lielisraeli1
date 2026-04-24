@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking AR</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>מעקב יד בזמן אמת</h1>
+            <p class="subtitle">Hand Tracking AR System</p>
+        </header>
+
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="scanline"></div>
+            <div class="corner top-left"></div>
+            <div class="corner top-right"></div>
+            <div class="corner bottom-left"></div>
+            <div class="corner bottom-right"></div>
+            <div class="hud">
+                <div class="hud-item">
+                    <span class="label">STATUS:</span>
+                    <span id="status" class="value">INITIALIZING...</span>
+                </div>
+                <div class="hud-item">
+                    <span class="label">HANDS:</span>
+                    <span id="hand-count" class="value">0</span>
+                </div>
+                <div class="hud-item">
+                    <span class="label">FPS:</span>
+                    <span id="fps" class="value">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="start-btn" class="btn btn-primary">הפעל מצלמה</button>
+            <button id="stop-btn" class="btn btn-secondary" disabled>עצור</button>
+            <div class="options">
+                <label>
+                    <input type="checkbox" id="mirror" checked>
+                    <span>תמונת מראה</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="show-landmarks" checked>
+                    <span>נקודות ציון</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="show-connections" checked>
+                    <span>קווי חיבור</span>
+                </label>
+            </div>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="script.js"></script>
+</body>
+</html>
