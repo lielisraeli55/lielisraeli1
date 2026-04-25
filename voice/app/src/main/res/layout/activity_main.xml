@@ -52,6 +52,18 @@
             <TextView android:id="@+id/status_sms" style="@style/RowStatus"/></LinearLayout>
         <LinearLayout style="@style/Row"><TextView style="@style/RowLabel" android:text="@string/perm_notif"/>
             <TextView android:id="@+id/status_notif" style="@style/RowStatus"/></LinearLayout>
+        <LinearLayout style="@style/Row"><TextView style="@style/RowLabel" android:text="@string/perm_camera"/>
+            <TextView android:id="@+id/status_camera" style="@style/RowStatus"/></LinearLayout>
+        <LinearLayout style="@style/Row"><TextView style="@style/RowLabel" android:text="@string/perm_notif_listener"/>
+            <TextView android:id="@+id/status_notif_listener" style="@style/RowStatus"/></LinearLayout>
+
+        <Button android:id="@+id/btn_notif_listener"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/btn_grant_notif_listener"
+            android:textColor="@color/accent"/>
 
         <Button android:id="@+id/btn_overlay"
             style="?android:attr/borderlessButtonStyle"

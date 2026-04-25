@@ -27,7 +27,45 @@ object ActionExecutor {
             is Command.Navigate -> navigate(context, cmd.destination)
             is Command.SetTimer -> setTimer(context, cmd.minutes)
             is Command.Flashlight -> setFlashlight(context, cmd.on)
+            is Command.ReadAloud -> startOcr(context)
+            is Command.NotificationReader -> toggleNotifReader(context, cmd.on)
+            is Command.StopSpeaking -> stopSpeaking(context)
+            is Command.RecordVoiceMessage -> recordVoice(context)
         }
+    }
+
+    private fun startOcr(ctx: Context) {
+        val intent = Intent(ctx, CameraOcrActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        ctx.startActivity(intent)
+    }
+
+    private fun toggleNotifReader(ctx: Context, on: Boolean) {
+        if (on && !NotificationReaderService.isListenerEnabled(ctx)) {
+            toast(ctx, "אנא אשר גישה ל-Notification Listener בהגדרות")
+            val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS").apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try { ctx.startActivity(intent) } catch (_: Exception) {}
+            return
+        }
+        NotificationReaderService.setEnabled(ctx, on)
+        val msg = if (on) "הקראת הודעות פעילה" else "הקראת הודעות כובתה"
+        toast(ctx, msg)
+        TtsManager.speak(ctx, msg)
+    }
+
+    private fun stopSpeaking(ctx: Context) {
+        TtsManager.stop()
+        toast(ctx, "השתקה")
+    }
+
+    private fun recordVoice(ctx: Context) {
+        val intent = Intent(ctx, VoiceRecorderActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        ctx.startActivity(intent)
     }
 
     private fun toast(context: Context, msg: String) {

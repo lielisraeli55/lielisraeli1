@@ -29,6 +29,7 @@ class VoiceCaptureActivity : AppCompatActivity() {
         transcript = findViewById(R.id.transcript)
         hint = findViewById(R.id.hint)
         findViewById<android.view.View>(R.id.cancel).setOnClickListener { finish() }
+        TtsManager.init(applicationContext)
         startListening()
     }
 

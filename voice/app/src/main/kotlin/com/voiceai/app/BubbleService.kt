@@ -37,6 +37,7 @@ class BubbleService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         startForeground(NOTIF_ID, buildNotification())
+        TtsManager.init(applicationContext)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         addBubble()
     }

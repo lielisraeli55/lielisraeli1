@@ -33,6 +33,19 @@ sealed class Command {
     data class Flashlight(val on: Boolean) : Command() {
         override fun shortDescription() = if (on) "פנס דולק" else "פנס כבוי"
     }
+    object ReadAloud : Command() {
+        override fun shortDescription() = "קורא טקסט מהמצלמה"
+    }
+    data class NotificationReader(val on: Boolean) : Command() {
+        override fun shortDescription() =
+            if (on) "הקראת הודעות פעילה" else "הקראת הודעות כבויה"
+    }
+    object StopSpeaking : Command() {
+        override fun shortDescription() = "השתקה"
+    }
+    object RecordVoiceMessage : Command() {
+        override fun shortDescription() = "מקליט הודעה קולית"
+    }
 }
 
 object CommandParser {
@@ -42,6 +55,38 @@ object CommandParser {
             .replace("ה", "ה")
             .replace(Regex("\\s+"), " ")
         val lower = t.lowercase()
+
+        // ----- Stop speaking
+        if (Regex("(?:תפסיק לדבר|שתוק|תשתוק|תפסיק להקריא|די|stop|לא לדבר)", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.StopSpeaking
+        }
+
+        // ----- Read aloud (OCR via camera)
+        if (Regex("(?:תקרא|קרא).{0,15}?(?:לי\\s+)?(?:מה כתוב|את הטקסט|טקסט|מה רשום|את הכיתוב|לי טקסט|מהמצלמה)", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.ReadAloud
+        }
+        if (Regex("(?:מה כתוב|מה רשום)\\s*(?:כאן|פה|שם)?", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.ReadAloud
+        }
+        if (Regex("(?:תאר|תספר).{0,5}?(?:לי\\s+)?(?:תמונה|מה אתה רואה|מה רואים|תוכן)", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.ReadAloud
+        }
+
+        // ----- Notification reader toggle
+        if (Regex("(?:תקרא|תקריא|הקרא|הקריא).{0,15}?(?:הודעות|ההודעות|notifications)|הפעל הקראת הודעות|תפעיל הקראת הודעות", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.NotificationReader(true)
+        }
+        if (Regex("(?:כבה|תכבה|בטל).{0,15}?(?:הקראת הודעות|הקראה|notifications)", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.NotificationReader(false)
+        }
+
+        // ----- Voice memo recording
+        if (Regex("(?:הקלט|תקליט).{0,10}?(?:הודעה|הודעה קולית|voice message|voice memo)", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.RecordVoiceMessage
+        }
+        if (Regex("(?:שלח|תשלח).{0,10}?הודעה קולית", RegexOption.IGNORE_CASE).containsMatchIn(t)) {
+            return Command.RecordVoiceMessage
+        }
 
         // ----- WhatsApp message: "תשלח וואטסאפ ל<X> <message>"
         Regex(
