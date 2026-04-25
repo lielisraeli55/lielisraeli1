@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.os.Build
@@ -192,8 +194,15 @@ class OverlayService : LifecycleService() {
         val landmarker = landmarker ?: run { proxy.close(); return }
         val ts = System.currentTimeMillis()
         try {
-            val bitmap = proxy.toBitmap()
-            val mpImage = BitmapImageBuilder(bitmap).build()
+            val raw = proxy.toBitmap()
+            val rotation = proxy.imageInfo.rotationDegrees
+            val oriented = if (rotation != 0) {
+                val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                val rotated = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                if (rotated !== raw) raw.recycle()
+                rotated
+            } else raw
+            val mpImage = BitmapImageBuilder(oriented).build()
             landmarker.detectAsync(mpImage, ts)
         } catch (e: Exception) {
             Log.e(TAG, "frame error", e)
