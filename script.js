@@ -367,3 +367,39 @@ if (!navigator.mediaDevices?.getUserMedia) {
     showError('הדפדפן לא תומך בגישה למצלמה.');
     startBtn.disabled = true;
 }
+
+/* ---------- PWA INSTALL ---------- */
+
+const installBtn = document.getElementById('install-btn');
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.classList.remove('hidden');
+});
+
+installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    installBtn.disabled = true;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (outcome === 'accepted') {
+        installBtn.classList.add('hidden');
+    }
+    installBtn.disabled = false;
+});
+
+window.addEventListener('appinstalled', () => {
+    installBtn.classList.add('hidden');
+    deferredPrompt = null;
+});
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js').catch((err) => {
+            console.warn('Service worker registration failed:', err);
+        });
+    });
+}

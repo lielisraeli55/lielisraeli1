@@ -2,8 +2,18 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>שליטה ביד</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Air Touch</title>
+    <meta name="description" content="שליטה במסך הטלפון בתנועות יד דרך המצלמה">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#00ff88">
+    <meta name="background-color" content="#04060a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Air Touch">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="air-body">
@@ -26,6 +36,7 @@
 
     <div class="footer-bar">
         <span>אפליקציות שנפתחו: <strong id="open-count">0</strong></span>
+        <button id="install-btn" class="btn-install hidden">התקן</button>
         <button id="start-btn" class="btn-start">הפעל מצלמה</button>
         <button id="stop-btn" class="btn-stop hidden">עצור</button>
     </div>
