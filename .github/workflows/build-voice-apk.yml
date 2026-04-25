@@ -1,0 +1,89 @@
+name: Build Voice AI APK
+
+on:
+  push:
+    branches: ['claude/hand-tracking-camera-iKo1K']
+    paths:
+      - 'voice/**'
+      - '.github/workflows/build-voice-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate Gradle wrapper
+        working-directory: voice
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Build debug APK
+        working-directory: voice
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp voice/app/build/outputs/apk/debug/app-debug.apk dist/voiceai-${{ github.run_number }}.apk
+          ls -lh dist/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceai-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish APK as GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voice-${{ github.run_number }}
+          name: Voice AI APK ${{ github.run_number }}
+          files: dist/voiceai-${{ github.run_number }}.apk
+          generate_release_notes: false
+          body: |
+            APK של עוזר קולי שמתפעל אפליקציות בעברית — Voice AI.
+
+            **לאחר התקנה:**
+            1. אישור הרשאת "ציור מעל אפליקציות אחרות"
+            2. אישור הרשאות מיקרופון, אנשי קשר, חיוג, SMS
+            3. לחץ "הפעל בועה" — תופיע בועת מיקרופון צפה בקצה המסך
+
+            **שימוש:**
+            הקש על הבועה (אפשר לגרור) → דבר → הפקודה תרוץ אוטומטית.
+
+            **דוגמאות:**
+            - "תפעיל בספוטיפיי שיר X"
+            - "תתקשר ל[שם]"
+            - "תפתח וואטסאפ עם [שם]"
+            - "תשלח וואטסאפ ל[שם] [הודעה]"
+            - "תפתח [אפליקציה]"
+            - "תחפש [נושא]"
+            - "נווט ל[יעד]"
+            - "טיימר 10 דקות"
+            - "הדלק פנס" / "כבה פנס"

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Voice AI</string>
+    <string name="subtitle">פקודה קולית בכל מקום בטלפון</string>
+    <string name="perm_header">הרשאות</string>
+    <string name="perm_overlay">בועה צפה (Display over apps)</string>
+    <string name="perm_mic">מיקרופון</string>
+    <string name="perm_contacts">אנשי קשר</string>
+    <string name="perm_call">חיוג</string>
+    <string name="perm_sms">SMS</string>
+    <string name="perm_notif">התראות</string>
+    <string name="btn_grant_overlay">פתח הגדרות שכבת-על</string>
+    <string name="btn_grant_perms">בקש שאר הרשאות</string>
+    <string name="btn_start">הפעל בועה</string>
+    <string name="btn_stop">עצור בועה</string>
+    <string name="info_text">איך זה עובד:\nאחרי הפעלה תופיע בועת מיקרופון צפה. הקש עליה (גרור כדי להזיז) → מיקרופון נדלק → דבר בעברית.\nהאפליקציה תזהה פקודות ותפעיל אותן באפליקציה המתאימה.</string>
+    <string name="examples_text">דוגמאות:\n• "תפעיל בספוטיפיי [שם שיר]"\n• "תתקשר ל[שם איש קשר]"\n• "תפתח וואטסאפ עם [שם]"\n• "תשלח וואטסאפ ל[שם] [הודעה]"\n• "תפתח [שם אפליקציה]"\n• "תחפש [נושא]"\n• "נווט ל[יעד]"\n• "טיימר 5 דקות"\n• "הדלק פנס" / "כבה פנס"</string>
+</resources>
