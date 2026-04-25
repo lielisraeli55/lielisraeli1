@@ -2,78 +2,61 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>בקרת גישה</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>שליטה ביד</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="access-body">
-    <div class="container">
-        <header>
-            <h1>בקרת גישה</h1>
-            <p class="subtitle">FACE RECOGNITION ACCESS CONTROL</p>
-        </header>
-
-        <div id="loading" class="loading-bar">
-            <div class="loading-spinner"></div>
-            <span id="loading-text">טוען מודלים...</span>
+<body class="air-body">
+    <div class="top-bar">
+        <h1>שליטה ביד</h1>
+        <div class="indicators">
+            <div class="indicator" id="ind-cam"><span class="dot"></span>מצלמה</div>
+            <div class="indicator" id="ind-hand"><span class="dot"></span>יד</div>
+            <div class="indicator" id="ind-pinch"><span class="dot"></span>צביטה</div>
         </div>
-
-        <!-- ENROLLMENT -->
-        <section class="panel">
-            <h2 class="panel-title">אנשים מורשים</h2>
-
-            <div class="upload-row">
-                <input type="text" id="person-name" placeholder="שם מלא" maxlength="40">
-                <label for="file-input" class="file-label">
-                    <span class="plus">+</span>
-                    <span>בחר תמונה</span>
-                </label>
-                <input type="file" id="file-input" accept="image/*" hidden>
-            </div>
-            <p class="hint" id="enroll-hint">הכנס שם ולחץ לבחירת תמונה. התמונה תעובד ותישמר בדפדפן בלבד.</p>
-
-            <div class="enrolled-list" id="enrolled-list">
-                <p class="empty-msg">עדיין לא נוספו אנשים — כל פנים יזוהו כ"לא מורשה".</p>
-            </div>
-        </section>
-
-        <!-- SCANNER -->
-        <section class="panel">
-            <h2 class="panel-title">סריקה חיה</h2>
-
-            <div class="status-banner" id="status-banner" data-state="idle">
-                <div class="status-pulse"></div>
-                <div class="status-text" id="status-text">לחץ "הפעל סריקה"</div>
-                <div class="status-sub" id="status-sub"></div>
-            </div>
-
-            <div class="video-container scan-container">
-                <video id="video" autoplay playsinline muted></video>
-                <canvas id="canvas"></canvas>
-                <div class="scanline"></div>
-                <div class="corner top-left"></div>
-                <div class="corner top-right"></div>
-                <div class="corner bottom-left"></div>
-                <div class="corner bottom-right"></div>
-                <div class="video-placeholder" id="video-placeholder">
-                    <svg viewBox="0 0 100 100" width="80" height="80" aria-hidden="true">
-                        <circle cx="50" cy="40" r="16" fill="none" stroke="currentColor" stroke-width="3"/>
-                        <path d="M20,85 Q20,60 50,60 Q80,60 80,85" fill="none" stroke="currentColor" stroke-width="3"/>
-                    </svg>
-                    <p>המצלמה כבויה</p>
-                </div>
-            </div>
-
-            <div class="controls">
-                <button id="start-btn" class="btn btn-primary" disabled>הפעל סריקה</button>
-                <button id="stop-btn" class="btn btn-secondary" disabled>עצור</button>
-            </div>
-        </section>
-
-        <div id="error" class="error hidden"></div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.js"></script>
+    <div class="instructions" id="instructions">
+        <p>הצבע באצבע — הסמן יזוז. צבוט (אגודל + אצבע) — נפתחת אפליקציה.</p>
+    </div>
+
+    <div class="apps-grid" id="apps-grid">
+        <!-- apps injected by JS -->
+    </div>
+
+    <div class="footer-bar">
+        <span>אפליקציות שנפתחו: <strong id="open-count">0</strong></span>
+        <button id="start-btn" class="btn-start">הפעל מצלמה</button>
+        <button id="stop-btn" class="btn-stop hidden">עצור</button>
+    </div>
+
+    <!-- Camera mini preview -->
+    <div class="cam-preview" id="cam-preview">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="cam-canvas"></canvas>
+        <div class="cam-label">CAM</div>
+    </div>
+
+    <!-- The pointer -->
+    <div class="pointer" id="pointer">
+        <div class="pointer-ring"></div>
+        <div class="pointer-dot"></div>
+    </div>
+
+    <!-- App modal -->
+    <div class="modal-backdrop hidden" id="modal-backdrop">
+        <div class="modal" id="modal">
+            <div class="modal-icon" id="modal-icon">📱</div>
+            <h2 id="modal-title">אפליקציה</h2>
+            <p id="modal-content">תוכן האפליקציה...</p>
+            <button class="modal-close" id="modal-close">סגור</button>
+        </div>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
     <script src="script.js"></script>
 </body>
 </html>

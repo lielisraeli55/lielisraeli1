@@ -1,419 +1,369 @@
-const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/model/';
-const MATCH_THRESHOLD = 0.55;
-const DETECT_INTERVAL_MS = 300;
-const SPEECH_COOLDOWN_MS = 3500;
+const APPS = [
+    { id: 'clock',    name: 'שעון',         icon: '⏰', color: '#00c8ff' },
+    { id: 'camera',   name: 'מצלמה',        icon: '📷', color: '#ff66cc' },
+    { id: 'messages', name: 'הודעות',       icon: '💬', color: '#00ff88' },
+    { id: 'calls',    name: 'שיחות',        icon: '📞', color: '#44ddff' },
+    { id: 'music',    name: 'מוזיקה',       icon: '🎵', color: '#ff8844' },
+    { id: 'maps',     name: 'מפות',         icon: '🗺️', color: '#88ff44' },
+    { id: 'mail',     name: 'דואר',         icon: '✉️', color: '#ffaa00' },
+    { id: 'photos',   name: 'גלריה',        icon: '🖼️', color: '#ff5577' },
+    { id: 'settings', name: 'הגדרות',       icon: '⚙️', color: '#aaaaaa' },
+    { id: 'contacts', name: 'אנשי קשר',     icon: '👥', color: '#33ddaa' },
+    { id: 'notes',    name: 'פתקים',        icon: '📝', color: '#ffdd44' },
+    { id: 'weather',  name: 'מזג אוויר',    icon: '⛅', color: '#66bbff' },
+];
 
-const loadingEl = document.getElementById('loading');
-const loadingText = document.getElementById('loading-text');
-const personName = document.getElementById('person-name');
-const fileInput = document.getElementById('file-input');
-const enrolledList = document.getElementById('enrolled-list');
-const enrollHint = document.getElementById('enroll-hint');
+const PINCH_ON  = 0.40;
+const PINCH_OFF = 0.55;
+const SMOOTH = 0.30;
 
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const videoPlaceholder = document.getElementById('video-placeholder');
-const statusBanner = document.getElementById('status-banner');
-const statusText = document.getElementById('status-text');
-const statusSub = document.getElementById('status-sub');
+const grid = document.getElementById('apps-grid');
+const indCam = document.getElementById('ind-cam');
+const indHand = document.getElementById('ind-hand');
+const indPinch = document.getElementById('ind-pinch');
 const startBtn = document.getElementById('start-btn');
 const stopBtn = document.getElementById('stop-btn');
 const errorEl = document.getElementById('error');
+const openCountEl = document.getElementById('open-count');
+const pointer = document.getElementById('pointer');
+const camPreview = document.getElementById('cam-preview');
+const video = document.getElementById('video');
+const camCanvas = document.getElementById('cam-canvas');
+const camCtx = camCanvas.getContext('2d');
+const modalBackdrop = document.getElementById('modal-backdrop');
+const modal = document.getElementById('modal');
+const modalIcon = document.getElementById('modal-icon');
+const modalTitle = document.getElementById('modal-title');
+const modalContent = document.getElementById('modal-content');
+const modalClose = document.getElementById('modal-close');
 
-let modelsLoaded = false;
-let enrolled = [];   // [{ id, name, descriptor, thumbnail }]
-let stream = null;
-let scanning = false;
-let detectTimer = null;
+let hands = null;
+let camera = null;
+let running = false;
+let target = { x: window.innerWidth / 2, y: window.innerHeight / 2, valid: false };
+let pos = { x: target.x, y: target.y };
+let isPinched = false;
+let wasPinched = false;
+let hoverEl = null;
+let openCount = 0;
 let audioCtx = null;
-const lastSpokenAt = { authorized: 0, denied: 0, noface: 0 };
-const lastSpokenName = { authorized: '' };
 
-/* ---------- UI HELPERS ---------- */
+const HAND_CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[0,17],[17,18],[18,19],[19,20],
+];
 
-function showError(msg) {
-    errorEl.textContent = msg;
-    errorEl.classList.remove('hidden');
-}
-function clearError() { errorEl.classList.add('hidden'); }
+/* ---------- APPS GRID ---------- */
 
-function setStatus(state, main, sub = '') {
-    statusBanner.dataset.state = state;
-    statusText.textContent = main;
-    statusSub.textContent = sub;
-}
+APPS.forEach(app => {
+    const el = document.createElement('div');
+    el.className = 'app';
+    el.dataset.app = app.id;
+    el.style.setProperty('--app-color', app.color);
+    el.innerHTML = `
+        <div class="app-icon">${app.icon}</div>
+        <div class="app-name">${app.name}</div>
+    `;
+    el.addEventListener('click', () => openApp(app.id));
+    grid.appendChild(el);
+});
+
+/* ---------- AUDIO ---------- */
 
 function ensureAudio() {
     if (!audioCtx) {
         try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
         catch (_) { /* ignore */ }
     }
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
 }
 
-function beep(freq, duration, type = 'square', volume = 0.25) {
+function beep(freq, duration, type = 'sine', volume = 0.18) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = type;
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
     osc.connect(gain).connect(audioCtx.destination);
     osc.start();
     osc.stop(audioCtx.currentTime + duration + 0.02);
 }
 
-function speak(text) {
-    try {
-        if (!window.speechSynthesis) return;
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'he-IL';
-        u.rate = 1.0;
-        u.volume = 1.0;
-        window.speechSynthesis.speak(u);
-    } catch (_) { /* ignore */ }
+/* ---------- HOVER / CLICK ---------- */
+
+function getAppUnder(x, y) {
+    const els = document.elementsFromPoint(x, y);
+    for (const el of els) {
+        const app = el.closest && el.closest('.app');
+        if (app) return app;
+        const close = el.closest && el.closest('.modal-close');
+        if (close) return close;
+    }
+    return null;
 }
 
-function triggerAuthorized(name) {
-    const now = performance.now();
-    if (name === lastSpokenName.authorized && now - lastSpokenAt.authorized < SPEECH_COOLDOWN_MS) return;
-    lastSpokenAt.authorized = now;
-    lastSpokenName.authorized = name;
-    beep(880, 0.18, 'sine', 0.2);
-    setTimeout(() => beep(1320, 0.22, 'sine', 0.2), 150);
-    speak(`אדם מורשה. ${name}`);
-}
-
-function triggerDenied() {
-    const now = performance.now();
-    if (now - lastSpokenAt.denied < SPEECH_COOLDOWN_MS) return;
-    lastSpokenAt.denied = now;
-    lastSpokenName.authorized = '';
-    beep(440, 0.25, 'square', 0.3);
-    setTimeout(() => beep(330, 0.3, 'square', 0.3), 200);
-    speak('אדם לא מורשה');
-}
-
-function triggerNoFace() {
-    const now = performance.now();
-    if (now - lastSpokenAt.noface < SPEECH_COOLDOWN_MS) return;
-    lastSpokenAt.noface = now;
-    lastSpokenName.authorized = '';
-    beep(660, 0.18, 'triangle', 0.2);
-    speak('נא גלה את הפנים');
-}
-
-/* ---------- MODEL LOADING ---------- */
-
-async function loadModels() {
-    loadingText.textContent = 'טוען מודלים... (ייתכן שייקח רגע)';
-    try {
-        await Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-        ]);
-        modelsLoaded = true;
-        loadingEl.classList.add('hidden');
-        startBtn.disabled = false;
-        setStatus('idle', 'מוכן', 'לחץ "הפעל סריקה" כדי להתחיל');
-    } catch (err) {
-        console.error(err);
-        loadingText.textContent = 'שגיאה בטעינת המודלים. רענן את הדף.';
-        loadingEl.classList.add('error-state');
+function setHover(el) {
+    if (hoverEl === el) return;
+    if (hoverEl) hoverEl.classList.remove('hovering');
+    hoverEl = el;
+    if (hoverEl) {
+        hoverEl.classList.add('hovering');
+        beep(900, 0.05, 'sine', 0.08);
     }
 }
 
-/* ---------- ENROLLMENT ---------- */
-
-function renderEnrolled() {
-    if (enrolled.length === 0) {
-        enrolledList.innerHTML = '<p class="empty-msg">עדיין לא נוספו אנשים — כל פנים יזוהו כ"לא מורשה".</p>';
+function pinchClick() {
+    if (!hoverEl) {
+        pointer.classList.add('miss');
+        setTimeout(() => pointer.classList.remove('miss'), 200);
         return;
     }
-    enrolledList.innerHTML = '';
-    enrolled.forEach(p => {
-        const card = document.createElement('div');
-        card.className = 'person-card';
-        card.innerHTML = `
-            <img src="${p.thumbnail}" alt="${p.name}">
-            <span class="person-name">${p.name}</span>
-            <button class="person-remove" data-id="${p.id}" aria-label="הסר">×</button>
-        `;
-        enrolledList.appendChild(card);
-    });
-    enrolledList.querySelectorAll('.person-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = Number(btn.dataset.id);
-            enrolled = enrolled.filter(p => p.id !== id);
-            renderEnrolled();
-        });
-    });
-}
-
-function fileToImage(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = reader.result;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
-
-function cropThumb(img, box, size = 120) {
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const cx = c.getContext('2d');
-    const pad = Math.max(box.width, box.height) * 0.25;
-    const sx = Math.max(0, box.x - pad);
-    const sy = Math.max(0, box.y - pad);
-    const sw = Math.min(img.width - sx, box.width + pad * 2);
-    const sh = Math.min(img.height - sy, box.height + pad * 2);
-    cx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
-    return c.toDataURL('image/jpeg', 0.8);
-}
-
-async function enrollFile(file) {
-    const name = personName.value.trim();
-    if (!name) {
-        enrollHint.textContent = 'הכנס שם לפני בחירת תמונה';
-        enrollHint.classList.add('hint-error');
-        personName.focus();
-        return;
-    }
-    enrollHint.classList.remove('hint-error');
-    enrollHint.textContent = 'מעבד תמונה...';
-    try {
-        const img = await fileToImage(file);
-        const result = await faceapi
-            .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-        if (!result) {
-            enrollHint.textContent = 'לא זוהו פנים בתמונה. נסה תמונה אחרת.';
-            enrollHint.classList.add('hint-error');
-            return;
-        }
-        const thumbnail = cropThumb(img, result.detection.box);
-        enrolled.push({
-            id: Date.now() + Math.random(),
-            name,
-            descriptor: result.descriptor,
-            thumbnail,
-        });
-        renderEnrolled();
-        personName.value = '';
-        enrollHint.textContent = 'נוסף בהצלחה. אפשר להוסיף עוד.';
-        setTimeout(() => {
-            if (enrollHint.textContent === 'נוסף בהצלחה. אפשר להוסיף עוד.') {
-                enrollHint.textContent = 'הכנס שם ולחץ לבחירת תמונה. התמונה תעובד ותישמר בדפדפן בלבד.';
-            }
-        }, 3000);
-    } catch (err) {
-        console.error(err);
-        enrollHint.textContent = 'שגיאה בעיבוד התמונה.';
-        enrollHint.classList.add('hint-error');
+    pointer.classList.add('clicked');
+    setTimeout(() => pointer.classList.remove('clicked'), 250);
+    beep(1320, 0.12, 'triangle', 0.25);
+    setTimeout(() => beep(1760, 0.12, 'triangle', 0.2), 90);
+    if (hoverEl.classList.contains('app')) {
+        openApp(hoverEl.dataset.app);
+    } else if (hoverEl.classList.contains('modal-close')) {
+        closeModal();
     }
 }
 
-fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    await enrollFile(file);
-    fileInput.value = '';
+/* ---------- APP MODAL ---------- */
+
+const appContents = {
+    clock:    () => `השעה כעת: ${new Date().toLocaleTimeString('he-IL')}`,
+    camera:   () => 'מצלמה פעילה. (זו אפליקציה דמה)',
+    messages: () => 'אין הודעות חדשות.',
+    calls:    () => 'אין שיחות שלא נענו.',
+    music:    () => 'מנגן: שיר אקראי - אמן דמיוני',
+    maps:     () => 'מיקום: ישראל. (הדגמה)',
+    mail:     () => '0 הודעות לא נקראו.',
+    photos:   () => '143 תמונות בגלריה. (הדגמה)',
+    settings: () => 'גרסה 1.0 — בקרת אצבע.',
+    contacts: () => '12 אנשי קשר.',
+    notes:    () => 'אין פתקים שמורים.',
+    weather:  () => '24°C, מעונן חלקית. (הדגמה)',
+};
+
+function openApp(id) {
+    const app = APPS.find(a => a.id === id);
+    if (!app) return;
+    openCount++;
+    openCountEl.textContent = openCount;
+    modalIcon.textContent = app.icon;
+    modalIcon.style.color = app.color;
+    modalTitle.textContent = app.name;
+    modalContent.textContent = (appContents[id] || (() => 'אפליקציה נפתחה.'))();
+    modal.style.setProperty('--app-color', app.color);
+    modalBackdrop.classList.remove('hidden');
+}
+
+function closeModal() {
+    modalBackdrop.classList.add('hidden');
+}
+
+modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
 });
+modalClose.addEventListener('click', closeModal);
 
-/* ---------- SCANNER ---------- */
+/* ---------- HAND TRACKING ---------- */
 
-function resizeCanvas() {
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+function handScale(lm) {
+    const a = lm[0], b = lm[9];
+    const dx = a.x - b.x, dy = a.y - b.y;
+    return Math.hypot(dx, dy);
 }
 
-function findMatch(descriptor) {
-    let best = { name: null, distance: Infinity };
-    for (const p of enrolled) {
-        const d = faceapi.euclideanDistance(descriptor, p.descriptor);
-        if (d < best.distance) best = { name: p.name, distance: d };
-    }
-    return best.distance < MATCH_THRESHOLD ? best : null;
+function pinchRatio(lm) {
+    const t = lm[4], i = lm[8];
+    const dx = t.x - i.x, dy = t.y - i.y;
+    const dist = Math.hypot(dx, dy);
+    return dist / Math.max(handScale(lm), 0.001);
 }
 
-function drawFaceBox(box, color, label, sub) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 14;
-    const corner = Math.min(box.width, box.height) * 0.25;
-    const x = box.x, y = box.y, w = box.width, h = box.height;
-    const lines = [
-        [x, y + corner, x, y, x + corner, y],
-        [x + w - corner, y, x + w, y, x + w, y + corner],
-        [x + w, y + h - corner, x + w, y + h, x + w - corner, y + h],
-        [x + corner, y + h, x, y + h, x, y + h - corner],
-    ];
-    lines.forEach(([a, b, c, d, e, f]) => {
-        ctx.beginPath();
-        ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.lineTo(e, f);
-        ctx.stroke();
+function drawPreview(landmarks) {
+    camCtx.clearRect(0, 0, camCanvas.width, camCanvas.height);
+    if (!landmarks) return;
+    const w = camCanvas.width, h = camCanvas.height;
+
+    camCtx.lineWidth = 2;
+    camCtx.strokeStyle = isPinched ? '#ffaa00' : '#00ff88';
+    camCtx.shadowColor = camCtx.strokeStyle;
+    camCtx.shadowBlur = 6;
+    HAND_CONNECTIONS.forEach(([a, b]) => {
+        camCtx.beginPath();
+        camCtx.moveTo(landmarks[a].x * w, landmarks[a].y * h);
+        camCtx.lineTo(landmarks[b].x * w, landmarks[b].y * h);
+        camCtx.stroke();
     });
-    ctx.shadowBlur = 0;
+    camCtx.shadowBlur = 0;
 
-    const paddingX = 10, paddingY = 6;
-    ctx.font = 'bold 18px "Segoe UI", sans-serif';
-    const labelWidth = ctx.measureText(label).width;
-    const subWidth = sub ? ctx.measureText(sub).width : 0;
-    const boxWidth = Math.max(labelWidth, subWidth) + paddingX * 2;
-    const boxHeight = sub ? 46 : 28;
-    const labelY = y + h + 8;
+    landmarks.forEach((lm, i) => {
+        const x = lm.x * w, y = lm.y * h;
+        let radius = 2.5, fill = '#ffffff';
+        if (i === 4) { radius = 4; fill = '#ffaa00'; }
+        if (i === 8) { radius = 4; fill = '#00c8ff'; }
+        camCtx.fillStyle = fill;
+        camCtx.beginPath();
+        camCtx.arc(x, y, radius, 0, Math.PI * 2);
+        camCtx.fill();
+    });
 
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(x, labelY, boxWidth, boxHeight);
-    ctx.fillStyle = color;
-    ctx.fillText(label, x + paddingX, labelY + 20);
-    if (sub) {
-        ctx.font = '13px "Segoe UI", sans-serif';
-        ctx.fillStyle = '#ddd';
-        ctx.fillText(sub, x + paddingX, labelY + 40);
-    }
+    const t = landmarks[4], idx = landmarks[8];
+    camCtx.strokeStyle = isPinched ? '#ffaa00' : 'rgba(255,255,255,0.4)';
+    camCtx.lineWidth = isPinched ? 3 : 1.5;
+    camCtx.beginPath();
+    camCtx.moveTo(t.x * w, t.y * h);
+    camCtx.lineTo(idx.x * w, idx.y * h);
+    camCtx.stroke();
 }
 
-async function detectOnce() {
-    if (!scanning || !modelsLoaded) return;
-    if (video.readyState < 2) return;
-
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        resizeCanvas();
+function onResults(results) {
+    if (camCanvas.width !== video.videoWidth || camCanvas.height !== video.videoHeight) {
+        if (video.videoWidth) {
+            camCanvas.width = video.videoWidth;
+            camCanvas.height = video.videoHeight;
+        }
     }
 
-    let results = [];
-    try {
-        if (enrolled.length > 0) {
-            results = await faceapi
-                .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
-                .withFaceLandmarks()
-                .withFaceDescriptors();
-        } else {
-            const raw = await faceapi.detectAllFaces(
-                video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 })
-            );
-            results = raw.map(d => ({ detection: d, descriptor: null }));
-        }
-    } catch (err) {
-        console.error(err);
+    const list = results.multiHandLandmarks || [];
+    if (list.length === 0) {
+        target.valid = false;
+        indHand.classList.remove('on');
+        drawPreview(null);
+        wasPinched = false;
+        isPinched = false;
+        indPinch.classList.remove('on');
+        pointer.classList.remove('pinched');
         return;
     }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const lm = list[0];
+    const idx = lm[8];
+    const screenX = (1 - idx.x) * window.innerWidth;
+    const screenY = idx.y * window.innerHeight;
+    target.x = screenX;
+    target.y = screenY;
+    target.valid = true;
+    indHand.classList.add('on');
 
-    if (results.length === 0) {
-        setStatus('noface', 'אין זיהוי פנים', 'גלה את פניך למצלמה');
-        triggerNoFace();
-        return;
-    }
+    const ratio = pinchRatio(lm);
+    if (!isPinched && ratio < PINCH_ON) isPinched = true;
+    else if (isPinched && ratio > PINCH_OFF) isPinched = false;
 
-    let deniedCount = 0;
-    let authorizedNames = [];
+    if (isPinched && !wasPinched) pinchClick();
+    wasPinched = isPinched;
 
-    for (const res of results) {
-        const box = res.detection.box;
-        let color, label, sub = '';
-        if (res.descriptor) {
-            const match = findMatch(res.descriptor);
-            if (match) {
-                color = '#00ff88';
-                label = '✓ מורשה';
-                sub = `${match.name} · ${(1 - match.distance).toFixed(2)}`;
-                authorizedNames.push(match.name);
-            } else {
-                color = '#ff4444';
-                label = '✕ לא מורשה';
-                deniedCount++;
-            }
-        } else {
-            color = '#ff4444';
-            label = '✕ לא מורשה';
-            sub = 'לא נוספו אנשים מורשים';
-            deniedCount++;
-        }
-        drawFaceBox(box, color, label, sub);
-    }
+    indPinch.classList.toggle('on', isPinched);
+    pointer.classList.toggle('pinched', isPinched);
 
-    if (deniedCount > 0) {
-        const denyMsg = results.length === 1
-            ? 'אדם לא מורשה'
-            : `${deniedCount} מתוך ${results.length} לא מורשים`;
-        setStatus('denied', denyMsg, '');
-        triggerDenied();
+    drawPreview(lm);
+}
+
+function loop() {
+    pos.x += (target.x - pos.x) * SMOOTH;
+    pos.y += (target.y - pos.y) * SMOOTH;
+    pointer.style.transform = `translate(${pos.x - 30}px, ${pos.y - 30}px)`;
+    pointer.classList.toggle('inactive', !target.valid);
+
+    if (target.valid) {
+        const el = getAppUnder(pos.x, pos.y);
+        setHover(el);
     } else {
-        const nameList = [...new Set(authorizedNames)].join(', ');
-        setStatus('authorized', 'אדם מורשה', nameList);
-        triggerAuthorized(nameList);
+        setHover(null);
     }
-}
 
-async function startScan() {
-    clearError();
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ---------- LIFECYCLE ---------- */
+
+async function start() {
+    errorEl.classList.add('hidden');
     ensureAudio();
-    if (!modelsLoaded) return;
+    startBtn.disabled = true;
+    startBtn.textContent = 'מתחבר...';
     try {
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-            audio: false,
+        hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`,
         });
-        video.srcObject = stream;
-        await video.play();
-        videoPlaceholder.classList.add('hidden');
-        scanning = true;
-        resizeCanvas();
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        setStatus('scanning', 'מחפש פנים...', '');
-        detectTimer = setInterval(detectOnce, DETECT_INTERVAL_MS);
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 0,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.5,
+        });
+        hands.onResults(onResults);
+
+        camera = new Camera(video, {
+            onFrame: async () => {
+                if (running && hands) await hands.send({ image: video });
+            },
+            width: 640,
+            height: 480,
+            facingMode: 'user',
+        });
+        running = true;
+        await camera.start();
+        indCam.classList.add('on');
+        camPreview.classList.add('active');
+        startBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        startBtn.textContent = 'הפעל מצלמה';
+        startBtn.disabled = false;
     } catch (err) {
         console.error(err);
         const msg = err?.message || String(err);
         if (msg.includes('Permission') || msg.includes('NotAllowed')) {
-            showError('נדרשת הרשאה למצלמה. אשר גישה ונסה שוב.');
+            showError('נדרשת הרשאה למצלמה. אשר ונסה שוב.');
         } else if (msg.includes('NotFound')) {
-            showError('לא נמצאה מצלמה במכשיר.');
+            showError('לא נמצאה מצלמה.');
         } else {
             showError('שגיאה: ' + msg);
         }
+        startBtn.textContent = 'הפעל מצלמה';
+        startBtn.disabled = false;
     }
 }
 
-function stopScan() {
-    scanning = false;
-    if (detectTimer) { clearInterval(detectTimer); detectTimer = null; }
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    video.srcObject = null;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    videoPlaceholder.classList.remove('hidden');
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    setStatus('idle', 'הופסק', 'לחץ "הפעל סריקה" כדי להתחיל שוב');
+async function stop() {
+    running = false;
+    target.valid = false;
+    isPinched = false;
+    wasPinched = false;
+    if (camera) { try { await camera.stop(); } catch (_) {} camera = null; }
+    if (hands) { hands.close(); hands = null; }
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+    }
+    camCtx.clearRect(0, 0, camCanvas.width, camCanvas.height);
+    indCam.classList.remove('on');
+    indHand.classList.remove('on');
+    indPinch.classList.remove('on');
+    camPreview.classList.remove('active');
+    startBtn.classList.remove('hidden');
+    stopBtn.classList.add('hidden');
 }
 
-startBtn.addEventListener('click', startScan);
-stopBtn.addEventListener('click', stopScan);
+function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.classList.remove('hidden');
+}
 
-/* ---------- INIT ---------- */
+startBtn.addEventListener('click', start);
+stopBtn.addEventListener('click', stop);
 
 if (!navigator.mediaDevices?.getUserMedia) {
     showError('הדפדפן לא תומך בגישה למצלמה.');
-}
-if (typeof faceapi === 'undefined') {
-    loadingText.textContent = 'לא הצלחתי לטעון את ספריית face-api.';
-} else {
-    loadModels();
+    startBtn.disabled = true;
 }
