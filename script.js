@@ -13,9 +13,10 @@ const APPS = [
     { id: 'weather',  name: 'מזג אוויר',    icon: '⛅', color: '#66bbff' },
 ];
 
-const PINCH_ON  = 0.40;
-const PINCH_OFF = 0.55;
-const SMOOTH = 0.30;
+const PINCH_ON  = 0.18;
+const PINCH_OFF = 0.30;
+const PINCH_STABILITY = 2;
+const SMOOTH = 0.35;
 
 const grid = document.getElementById('apps-grid');
 const indCam = document.getElementById('ind-cam');
@@ -44,6 +45,8 @@ let target = { x: window.innerWidth / 2, y: window.innerHeight / 2, valid: false
 let pos = { x: target.x, y: target.y };
 let isPinched = false;
 let wasPinched = false;
+let pinchOnFrames = 0;
+let pinchOffFrames = 0;
 let hoverEl = null;
 let openCount = 0;
 let audioCtx = null;
@@ -184,9 +187,11 @@ function handScale(lm) {
 
 function pinchRatio(lm) {
     const t = lm[4], i = lm[8];
-    const dx = t.x - i.x, dy = t.y - i.y;
-    const dist = Math.hypot(dx, dy);
-    return dist / Math.max(handScale(lm), 0.001);
+    const dx = t.x - i.x;
+    const dy = t.y - i.y;
+    const dz = (t.z || 0) - (i.z || 0);
+    const dist3d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return dist3d / Math.max(handScale(lm), 0.001);
 }
 
 function drawPreview(landmarks) {
@@ -241,8 +246,11 @@ function onResults(results) {
         drawPreview(null);
         wasPinched = false;
         isPinched = false;
+        pinchOnFrames = 0;
+        pinchOffFrames = 0;
         indPinch.classList.remove('on');
-        pointer.classList.remove('pinched');
+        pointer.classList.remove('pinched', 'approaching');
+        pointer.style.setProperty('--closeness', '0');
         return;
     }
 
@@ -256,14 +264,28 @@ function onResults(results) {
     indHand.classList.add('on');
 
     const ratio = pinchRatio(lm);
-    if (!isPinched && ratio < PINCH_ON) isPinched = true;
-    else if (isPinched && ratio > PINCH_OFF) isPinched = false;
+    if (ratio < PINCH_ON) {
+        pinchOnFrames++;
+        pinchOffFrames = 0;
+        if (!isPinched && pinchOnFrames >= PINCH_STABILITY) isPinched = true;
+    } else if (ratio > PINCH_OFF) {
+        pinchOffFrames++;
+        pinchOnFrames = 0;
+        if (isPinched && pinchOffFrames >= PINCH_STABILITY) isPinched = false;
+    } else {
+        pinchOnFrames = 0;
+        pinchOffFrames = 0;
+    }
 
     if (isPinched && !wasPinched) pinchClick();
     wasPinched = isPinched;
 
+    const closeness = Math.max(0, Math.min(1, (PINCH_OFF - ratio) / (PINCH_OFF - PINCH_ON)));
+    pointer.style.setProperty('--closeness', closeness.toFixed(2));
+
     indPinch.classList.toggle('on', isPinched);
     pointer.classList.toggle('pinched', isPinched);
+    pointer.classList.toggle('approaching', !isPinched && closeness > 0.4);
 
     drawPreview(lm);
 }
@@ -298,9 +320,9 @@ async function start() {
         });
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 0,
-            minDetectionConfidence: 0.6,
-            minTrackingConfidence: 0.5,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.65,
         });
         hands.onResults(onResults);
 

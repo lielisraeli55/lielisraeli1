@@ -343,6 +343,15 @@ body {
     transform: scale(0.7);
 }
 
+.pointer.approaching .pointer-ring {
+    border-color: #ffe24d;
+    box-shadow: 0 0 calc(14px + 14px * var(--closeness, 0)) #ffd633;
+}
+.pointer.approaching .pointer-dot {
+    background: #ffe24d;
+    box-shadow: 0 0 calc(10px + 10px * var(--closeness, 0)) #ffd633;
+}
+
 @keyframes click-burst {
     0%   { transform: scale(1); opacity: 1; }
     100% { transform: scale(2.5); opacity: 0; }

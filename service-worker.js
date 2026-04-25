@@ -1,4 +1,4 @@
-const CACHE_NAME = 'air-touch-v3';
+const CACHE_NAME = 'air-touch-v4';
 const ASSETS = [
     './',
     './index.html',
