@@ -1,0 +1,85 @@
+name: Build Native APK
+
+on:
+  push:
+    branches: ['claude/hand-tracking-camera-iKo1K']
+    paths:
+      - 'native/**'
+      - '.github/workflows/build-native-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate Gradle wrapper
+        working-directory: native
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Download MediaPipe Hand Landmarker model
+        run: |
+          mkdir -p native/app/src/main/assets
+          curl -fsSL -o native/app/src/main/assets/hand_landmarker.task \
+            https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+          ls -lh native/app/src/main/assets/
+
+      - name: Build debug APK
+        working-directory: native
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp native/app/build/outputs/apk/debug/app-debug.apk dist/airtouch-overlay-${{ github.run_number }}.apk
+          cp native/app/build/outputs/apk/debug/app-debug.apk dist/airtouch-overlay-latest.apk
+          ls -lh dist/
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtouch-overlay-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish APK as GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-${{ github.run_number }}
+          name: Native overlay APK ${{ github.run_number }}
+          files: dist/airtouch-overlay-${{ github.run_number }}.apk
+          generate_release_notes: false
+          body: |
+            APK של בקרה ביד אמיתית מעל אפליקציות אחרות (פרויקט Native ב-Kotlin).
+
+            **לאחר התקנה ראשונה צריך לאשר 3 הרשאות בתפריט שיוצג:**
+            1. ציור מעל אפליקציות אחרות (Display over other apps)
+            2. שירות נגישות (Accessibility — להזרקת לחיצות)
+            3. מצלמה
+
+            ואז ללחוץ "הפעל שליטה ביד".
