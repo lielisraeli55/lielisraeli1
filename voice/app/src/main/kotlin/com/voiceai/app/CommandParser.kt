@@ -51,9 +51,7 @@ sealed class Command {
 object CommandParser {
 
     fun parse(rawText: String): Command? {
-        val t = rawText.trim()
-            .replace("ה", "ה")
-            .replace(Regex("\\s+"), " ")
+        val t = preprocess(rawText)
         val lower = t.lowercase()
 
         // ----- Stop speaking
@@ -149,7 +147,7 @@ object CommandParser {
 
         // ----- Open app
         Regex(
-            "(?:תפתח|פתח|תריץ)\\s+(?:את\\s+)?(.+)",
+            "(?:תפתח|פתח|תריץ|open|launch)\\s+(?:לי\\s+)?(?:את\\s+)?(?:ה)?(.+)",
             RegexOption.IGNORE_CASE
         ).find(t)?.let {
             val app = it.groupValues[1].clean()
@@ -205,4 +203,58 @@ object CommandParser {
 
     private fun String.clean(): String =
         this.trim().trim('"', '\'', ',', '.', '?', '!').trim()
+
+    /**
+     * Normalises common polite prefixes and infinitive verbs into their
+     * imperative form so the rest of the patterns can stay simple.
+     *
+     * Examples:
+     *   "אתה יכול לפתוח לי את הוואטסאפ" -> "פתח לי את הוואטסאפ"
+     *   "תוכל בבקשה לחייג ליוסי"        -> "חייג ליוסי"
+     *   "אפשר לשמוע הודעה של חבר"       -> "שמע הודעה של חבר"
+     */
+    private fun preprocess(raw: String): String {
+        var s = raw.trim().replace(Regex("\\s+"), " ")
+
+        // Strip polite request prefixes (keep the infinitive ל attached to the verb that follows)
+        s = s.replace(
+            Regex(
+                "^(?:אתה\\s+יכול(?:ה)?|תוכל(?:י)?|אפשר|בבקשה|נא|תהיה\\s+טוב|תהי\\s+טובה)" +
+                    "\\s+(?:בבקשה\\s+)?",
+                RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
+
+        // Convert infinitive verb at start to imperative form (after stripping prefix above
+        // any leading "ל" attached to the verb root remains, fix it now)
+        val infinitiveMap = listOf(
+            "לפתוח" to "פתח",
+            "להפעיל" to "הפעל",
+            "להשמיע" to "השמע",
+            "לנגן" to "נגן",
+            "לשים" to "שים",
+            "להתקשר" to "התקשר",
+            "לחייג" to "חייג",
+            "לחפש" to "חפש",
+            "לשלוח" to "שלח",
+            "לקרוא" to "קרא",
+            "להקריא" to "הקרא",
+            "להקליט" to "הקלט",
+            "להפסיק" to "הפסק",
+            "לכבות" to "כבה",
+            "להדליק" to "הדלק",
+            "לנווט" to "נווט",
+            "לראות" to "ראה",
+            "לתאר" to "תאר",
+            "לספר" to "ספר",
+            "להוריד" to "הורד"
+        )
+        for ((inf, imp) in infinitiveMap) {
+            s = s.replace(Regex("^$inf\\b"), imp)
+            s = s.replace(Regex("\\s$inf\\b"), " $imp")
+        }
+
+        return s.trim()
+    }
 }
