@@ -29,7 +29,6 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.util.concurrent.Executors
-import kotlin.math.sqrt
 
 class OverlayService : LifecycleService() {
 
@@ -42,23 +41,45 @@ class OverlayService : LifecycleService() {
     private val analysisExecutor = Executors.newSingleThreadExecutor()
 
     private val screenSize = DisplayMetrics()
-
-    private var lastTimestampMs = 0L
     private var screenW = 0f
     private var screenH = 0f
 
-    private var isPinched = false
-    private var pinchOnFrames = 0
-    private var pinchOffFrames = 0
+    // Cursor state
     private var smoothX = 0f
     private var smoothY = 0f
     private var hasPos = false
 
+    // Sensitivity zone — small finger motions in the central [LO, HI] camera band
+    // cover the full screen, so the user only has to move the FINGER, not the whole arm.
+    private val SENS_LO = 0.25f
+    private val SENS_HI = 0.75f
+
+    // Pinch state
+    private var isPinched = false
+    private var pinchOnFrames = 0
+    private var pinchOffFrames = 0
+
+    // Gesture state
+    private var currentGesture = HandGesture.UNKNOWN
+    private var gestureFrames = 0
+    private var lastFiredGesture: HandGesture? = null
+    private var lastGestureFireMs = 0L
+
+    // Palm position history for swipe detection
+    private val palmHistory = ArrayDeque<Triple<Long, Float, Float>>()
+    private var lastSwipeMs = 0L
+
     companion object {
-        const val PINCH_ON = 0.18f
-        const val PINCH_OFF = 0.30f
+        const val PINCH_ON = 0.20f
+        const val PINCH_OFF = 0.32f
         const val PINCH_STABILITY = 2
-        const val SMOOTH = 0.35f
+        const val SMOOTH = 0.45f
+        const val GESTURE_STABLE_FRAMES = 3
+        const val FIST_HOLD_MS = 600L
+        const val SWIPE_COOLDOWN_MS = 800L
+        const val GESTURE_COOLDOWN_MS = 700L
+        const val PALM_HISTORY_MS = 350L
+        const val SWIPE_MIN_DX = 0.25f   // fraction of screen width
         const val NOTIF_CHANNEL = "airtouch_overlay"
         const val NOTIF_ID = 101
         const val TAG = "AirTouch"
@@ -81,14 +102,9 @@ class OverlayService : LifecycleService() {
     private fun buildNotification(): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
-            val channel = NotificationChannel(
-                NOTIF_CHANNEL,
-                "Air Touch overlay",
-                NotificationManager.IMPORTANCE_LOW
-            )
+            val channel = NotificationChannel(NOTIF_CHANNEL, "Air Touch overlay", NotificationManager.IMPORTANCE_LOW)
             nm.createNotificationChannel(channel)
         }
-
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -96,7 +112,6 @@ class OverlayService : LifecycleService() {
             this, 0, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
         return NotificationCompat.Builder(this, NOTIF_CHANNEL)
             .setContentTitle("Air Touch פעיל")
             .setContentText("שליטה ביד מעל אפליקציות")
@@ -131,13 +146,9 @@ class OverlayService : LifecycleService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
+            x = 0; y = 0
         }
-
-        try {
-            windowManager.addView(overlayView, overlayParams)
-        } catch (e: Exception) {
+        try { windowManager.addView(overlayView, overlayParams) } catch (e: Exception) {
             Log.e(TAG, "Failed to add overlay view", e)
         }
     }
@@ -182,12 +193,9 @@ class OverlayService : LifecycleService() {
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
-
         analysis.setAnalyzer(analysisExecutor) { proxy -> processFrame(proxy) }
         provider.unbindAll()
-        provider.bindToLifecycle(
-            this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis
-        )
+        provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
     }
 
     private fun processFrame(proxy: ImageProxy) {
@@ -197,10 +205,10 @@ class OverlayService : LifecycleService() {
             val raw = proxy.toBitmap()
             val rotation = proxy.imageInfo.rotationDegrees
             val oriented = if (rotation != 0) {
-                val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-                val rotated = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
-                if (rotated !== raw) raw.recycle()
-                rotated
+                val m = Matrix().apply { postRotate(rotation.toFloat()) }
+                val r = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+                if (r !== raw) raw.recycle()
+                r
             } else raw
             val mpImage = BitmapImageBuilder(oriented).build()
             landmarker.detectAsync(mpImage, ts)
@@ -213,76 +221,133 @@ class OverlayService : LifecycleService() {
 
     private fun onLandmarkResult(result: HandLandmarkerResult) {
         if (result.landmarks().isEmpty()) {
-            hasPos = false
-            isPinched = false
-            pinchOnFrames = 0
-            pinchOffFrames = 0
-            overlayView.update(null, false, 0f)
+            resetState()
+            overlayView.update(null, false, 0f, HandGesture.UNKNOWN)
             return
         }
         val lm = result.landmarks()[0]
-        val indexTip = lm[8]
-        val thumbTip = lm[4]
-        val wrist = lm[0]
-        val midMcp = lm[9]
 
-        val rawX = (1f - indexTip.x()) * screenW
-        val rawY = indexTip.y() * screenH
+        // ----- Cursor (driven by index fingertip with sensitivity expansion) -----
+        val ix = lm[8].x().coerceIn(0f, 1f)
+        val iy = lm[8].y().coerceIn(0f, 1f)
 
-        if (!hasPos) {
-            smoothX = rawX
-            smoothY = rawY
-            hasPos = true
-        } else {
+        // Map [SENS_LO, SENS_HI] band to full screen so small finger motions
+        // cover the whole screen and whole-arm drift is clamped.
+        val nx = ((SENS_HI - ix) / (SENS_HI - SENS_LO)).coerceIn(0f, 1f)
+        val ny = ((iy - SENS_LO) / (SENS_HI - SENS_LO)).coerceIn(0f, 1f)
+        val rawX = nx * screenW
+        val rawY = ny * screenH
+
+        if (!hasPos) { smoothX = rawX; smoothY = rawY; hasPos = true }
+        else {
             smoothX += (rawX - smoothX) * SMOOTH
             smoothY += (rawY - smoothY) * SMOOTH
         }
 
-        val dx = indexTip.x() - thumbTip.x()
-        val dy = indexTip.y() - thumbTip.y()
-        val dz = indexTip.z() - thumbTip.z()
-        val dist = sqrt(dx * dx + dy * dy + dz * dz)
-        val sx = wrist.x() - midMcp.x()
-        val sy = wrist.y() - midMcp.y()
-        val scale = sqrt(sx * sx + sy * sy).coerceAtLeast(0.001f)
-        val ratio = dist / scale
+        // ----- Gesture classification -----
+        val gesture = HandGestureClassifier.classify(lm, PINCH_ON)
 
-        if (ratio < PINCH_ON) {
-            pinchOnFrames++
-            pinchOffFrames = 0
-            if (!isPinched && pinchOnFrames >= PINCH_STABILITY) {
-                isPinched = true
-                triggerClick(smoothX, smoothY)
-            }
-        } else if (ratio > PINCH_OFF) {
-            pinchOffFrames++
-            pinchOnFrames = 0
-            if (isPinched && pinchOffFrames >= PINCH_STABILITY) {
-                isPinched = false
-            }
+        // Stable frame counter
+        if (gesture == currentGesture) {
+            gestureFrames++
+        } else {
+            currentGesture = gesture
+            gestureFrames = 1
         }
 
-        val closeness = ((PINCH_OFF - ratio) / (PINCH_OFF - PINCH_ON))
-            .coerceIn(0f, 1f)
-        overlayView.update(PointF(smoothX, smoothY), isPinched, closeness)
+        // Track pinch via hysteresis specifically (more responsive than gesture state)
+        val pinchRatio = HandGestureClassifier.pinchRatio(lm)
+        if (pinchRatio < PINCH_ON) {
+            pinchOnFrames++; pinchOffFrames = 0
+            if (!isPinched && pinchOnFrames >= PINCH_STABILITY) {
+                isPinched = true
+                fireTap(smoothX, smoothY)
+            }
+        } else if (pinchRatio > PINCH_OFF) {
+            pinchOffFrames++; pinchOnFrames = 0
+            if (isPinched && pinchOffFrames >= PINCH_STABILITY) isPinched = false
+        }
+
+        // Palm tracking for swipes — record palm-center positions while OPEN_PALM
+        val now = System.currentTimeMillis()
+        if (gesture == HandGesture.OPEN_PALM && gestureFrames >= GESTURE_STABLE_FRAMES) {
+            val px = (1f - lm[9].x()) * screenW   // mirror
+            val py = lm[9].y() * screenH
+            palmHistory.addLast(Triple(now, px, py))
+            // Drop old entries
+            while (palmHistory.isNotEmpty() && now - palmHistory.first().first > PALM_HISTORY_MS) {
+                palmHistory.removeFirst()
+            }
+            checkSwipe(now)
+        } else {
+            palmHistory.clear()
+        }
+
+        // Fist held → home
+        if (gesture == HandGesture.FIST &&
+            gestureFrames * 33 >= FIST_HOLD_MS &&  // ~33ms per frame (rough)
+            now - lastGestureFireMs > GESTURE_COOLDOWN_MS &&
+            lastFiredGesture != HandGesture.FIST
+        ) {
+            lastFiredGesture = HandGesture.FIST
+            lastGestureFireMs = now
+            GestureService.goHome()
+            overlayView.flashAction("HOME")
+        }
+
+        // Reset last-fired marker when gesture changes away
+        if (gesture != HandGesture.FIST && lastFiredGesture == HandGesture.FIST) {
+            lastFiredGesture = null
+        }
+
+        val closeness = ((PINCH_OFF - pinchRatio) / (PINCH_OFF - PINCH_ON)).coerceIn(0f, 1f)
+        overlayView.update(PointF(smoothX, smoothY), isPinched, closeness, gesture)
     }
 
-    private fun triggerClick(x: Float, y: Float) {
+    private fun checkSwipe(now: Long) {
+        if (palmHistory.size < 2) return
+        if (now - lastSwipeMs < SWIPE_COOLDOWN_MS) return
+        val first = palmHistory.first()
+        val last = palmHistory.last()
+        val dx = last.second - first.second
+        val dy = last.third - first.third
+        val absDx = kotlin.math.abs(dx)
+        val absDy = kotlin.math.abs(dy)
+        if (absDx > SWIPE_MIN_DX * screenW && absDx > absDy * 1.6f) {
+            lastSwipeMs = now
+            palmHistory.clear()
+            val midY = screenH * 0.5f
+            if (dx > 0) {
+                // Hand moved right (in mirrored screen coords) → swipe page right→left
+                GestureService.dispatchSwipe(screenW * 0.85f, midY, screenW * 0.15f, midY, 200)
+                overlayView.flashAction("SWIPE ◀")
+            } else {
+                GestureService.dispatchSwipe(screenW * 0.15f, midY, screenW * 0.85f, midY, 200)
+                overlayView.flashAction("SWIPE ▶")
+            }
+        }
+    }
+
+    private fun fireTap(x: Float, y: Float) {
         GestureService.dispatchTap(x, y)
         overlayView.flashClick()
     }
 
+    private fun resetState() {
+        hasPos = false
+        isPinched = false
+        pinchOnFrames = 0; pinchOffFrames = 0
+        currentGesture = HandGesture.UNKNOWN
+        gestureFrames = 0
+        palmHistory.clear()
+        lastFiredGesture = null
+    }
+
     override fun onDestroy() {
-        try {
-            cameraProvider?.unbindAll()
-        } catch (_: Exception) { }
-        try {
-            landmarker?.close()
-        } catch (_: Exception) { }
+        try { cameraProvider?.unbindAll() } catch (_: Exception) {}
+        try { landmarker?.close() } catch (_: Exception) {}
         analysisExecutor.shutdown()
-        try {
-            windowManager.removeView(overlayView)
-        } catch (_: Exception) { }
+        try { windowManager.removeView(overlayView) } catch (_: Exception) {}
         super.onDestroy()
     }
 }
