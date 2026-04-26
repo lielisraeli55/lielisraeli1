@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "שטחים",
+    "slug": "shtachim",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
+    "splash": {
+      "backgroundColor": "#04060A",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "האפליקציה צריכה את המיקום שלך כדי לסמן שטחים שכבשת.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "האפליקציה צריכה את המיקום שלך כדי לסמן שטחים שכבשת."
+      }
+    },
+    "android": {
+      "package": "com.lielisraeli.shtachim",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyA7VUI5vQXWCNOvRs_apwfc98B7dr-xqkc"
+        }
+      }
+    },
+    "newArchEnabled": false
+  }
+}

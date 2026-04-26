@@ -1,0 +1,106 @@
+name: Build Territory APK
+
+on:
+  push:
+    branches: ['claude/hand-tracking-camera-iKo1K']
+    paths:
+      - 'territory-game/**'
+      - '.github/workflows/build-territory-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Diagnostics
+        run: |
+          echo "node: $(node --version)"
+          echo "npm:  $(npm --version)"
+          echo "java: $(java -version 2>&1 | head -1)"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la "$ANDROID_HOME/platforms" 2>/dev/null || echo "(no platforms dir)"
+
+      - name: Install npm dependencies
+        working-directory: territory-game
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Expo prebuild (generate native android/)
+        working-directory: territory-game
+        env:
+          CI: 'true'
+          EXPO_NO_TELEMETRY: '1'
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Bump Gradle JVM heap
+        working-directory: territory-game/android
+        run: |
+          if grep -q '^org.gradle.jvmargs=' gradle.properties; then
+            sed -i 's|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8|' gradle.properties
+          else
+            echo 'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8' >> gradle.properties
+          fi
+          cat gradle.properties
+
+      - name: Build release APK (with bundled JS)
+        working-directory: territory-game/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp territory-game/android/app/build/outputs/apk/release/app-release.apk dist/territory-${{ github.run_number }}.apk
+          ls -lh dist/
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shtachim-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish APK as GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: territory-${{ github.run_number }}
+          name: שטחים APK ${{ github.run_number }}
+          files: dist/territory-${{ github.run_number }}.apk
+          generate_release_notes: false
+          body: |
+            APK של שטחים — משחק כיבוש שטחים מבוסס מיקום.
+
+            **הגדרה ראשונה:**
+            1. אישור הרשאת מיקום
+            2. בחר שם וצבע
+            3. צא לרחוב — תאים אפורים יופיעו על המפה
+            4. עמוד 1.5 שניות בתא ולחץ "כבוש"

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#CC000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:gravity="center">
+
+        <View
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/mic_circle"
+            android:layout_marginBottom="20dp"/>
+
+        <TextView
+            android:id="@+id/hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="מתחבר..."
+            android:textColor="@color/accent_secondary"
+            android:textSize="14sp"
+            android:letterSpacing="0.05"/>
+
+        <TextView
+            android:id="@+id/transcript"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:minHeight="60dp"/>
+
+        <Button
+            android:id="@+id/cancel"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:text="ביטול"
+            android:textColor="#888888"/>
+    </LinearLayout>
+</FrameLayout>
