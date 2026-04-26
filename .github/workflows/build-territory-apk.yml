@@ -69,16 +69,16 @@ jobs:
           fi
           cat gradle.properties
 
-      - name: Build debug APK
+      - name: Build release APK (with bundled JS)
         working-directory: territory-game/android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug
+          ./gradlew --no-daemon --stacktrace assembleRelease
 
       - name: Stage APK
         run: |
           mkdir -p dist
-          cp territory-game/android/app/build/outputs/apk/debug/app-debug.apk dist/territory-${{ github.run_number }}.apk
+          cp territory-game/android/app/build/outputs/apk/release/app-release.apk dist/territory-${{ github.run_number }}.apk
           ls -lh dist/
 
       - name: Upload APK as workflow artifact
