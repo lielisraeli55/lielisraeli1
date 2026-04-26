@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Territory Conquest",
-    "slug": "territory-conquest",
+    "name": "שטחים",
+    "slug": "shtachim",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -9,12 +9,12 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We need your location to track territory captures.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to track territory captures."
+        "NSLocationWhenInUseUsageDescription": "האפליקציה צריכה את המיקום שלך כדי לסמן שטחים שכבשת.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "האפליקציה צריכה את המיקום שלך כדי לסמן שטחים שכבשת."
       }
     },
     "android": {
-      "package": "com.example.territoryconquest",
+      "package": "com.lielisraeli.shtachim",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
