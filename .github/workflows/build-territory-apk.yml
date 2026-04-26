@@ -30,27 +30,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-
       - name: Install npm dependencies
         working-directory: territory-game
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm install --no-audit --no-fund
 
       - name: Expo prebuild (generate native android/)
         working-directory: territory-game
         env:
-          EXPO_NO_TELEMETRY: '1'
           CI: 'true'
-        run: |
-          npx expo prebuild --platform android --no-install --clean
+          EXPO_NO_TELEMETRY: '1'
+        run: npx expo prebuild --platform android --no-install
 
       - name: Build debug APK
         working-directory: territory-game/android
@@ -62,7 +51,6 @@ jobs:
         run: |
           mkdir -p dist
           cp territory-game/android/app/build/outputs/apk/debug/app-debug.apk dist/territory-${{ github.run_number }}.apk
-          cp territory-game/android/app/build/outputs/apk/debug/app-debug.apk dist/territory-latest.apk
           ls -lh dist/
 
       - name: Upload APK as workflow artifact
@@ -77,19 +65,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: territory-${{ github.run_number }}
-          name: Territory Conquest APK ${{ github.run_number }}
+          name: שטחים APK ${{ github.run_number }}
           files: dist/territory-${{ github.run_number }}.apk
           generate_release_notes: false
           body: |
-            APK של Territory Conquest — משחק כיבוש שטחים מבוסס מיקום בעולם האמיתי.
+            APK של שטחים — משחק כיבוש שטחים מבוסס מיקום ואמת.
 
-            **התקנה ראשונה:**
+            **הגדרה ראשונה:**
             1. אישור הרשאת מיקום
-            2. הזנת שם ובחירת צבע
-            3. צא לרחוב — תאים אפורים יופיעו על המפה סביבך
-            4. עמוד 1.5 שניות בתא ולחץ "כבוש את התא"
-
-            **חשוב:** ללא מפתח Google Maps API, מצב המפה על אנדרואיד יוצג ריק / אפור.
-            כדי להפעיל את המפה במלואה צריך לקבוע את ה-secret `GOOGLE_MAPS_KEY` במאגר
-            (Settings → Secrets and variables → Actions → New repository secret),
-            ואז להריץ workflow_dispatch כדי לבנות מחדש.
+            2. בחר שם וצבע
+            3. צא לרחוב — תאים אפורים יופיעו על המפה
+            4. עמוד 1.5 שניות בתא ולחץ "כבוש"

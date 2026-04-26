@@ -1,0 +1,11 @@
+node_modules/
+android/
+ios/
+.expo/
+dist/
+web-build/
+npm-debug.*
+yarn-error.*
+*.log
+.env
+.env.local
