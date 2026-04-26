@@ -54,16 +54,6 @@ jobs:
         run: |
           npx expo prebuild --platform android --no-install --clean
 
-      - name: Inject Google Maps API key (if provided)
-        if: ${{ env.GOOGLE_MAPS_KEY != '' }}
-        env:
-          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
-        working-directory: territory-game
-        run: |
-          if [ -f android/app/src/main/AndroidManifest.xml ]; then
-            sed -i "s|YOUR_GOOGLE_MAPS_API_KEY_HERE|$GOOGLE_MAPS_KEY|g" android/app/src/main/AndroidManifest.xml || true
-          fi
-
       - name: Build debug APK
         working-directory: territory-game/android
         run: |
