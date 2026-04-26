@@ -1,250 +1,394 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  Alert,
 } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import * as Location from 'expo-location';
 
-/* ====================================================================
- * Territory Conquest — Starter
- *
- * Live map + square grid overlay. Walk into an Unclaimed (grey) cell,
- * tap "CAPTURE", and it turns Captured (blue). The button is disabled
- * unless GPS accuracy is below the anti-cheat threshold.
- *
- * --- Coordinate-to-Grid math ---
- * The grid is anchored at lat = 0, lon = 0. Each cell is
- * CELL_SIZE_METERS on a side. Latitude has a (near-)constant
- * meters-per-degree (~111,320 m), so a row index is just
- *     row = floor(lat / latStep), latStep = CELL / 111320
- *
- * Longitude is trickier: 1 degree of longitude shrinks toward the
- * poles by cos(lat). So for a cell to be ~CELL meters wide on the
- * ground, the column step depends on the row:
- *     lonStep(row) = CELL / (111320 * cos(rowCenterLat))
- * and  col = floor(lon / lonStep(row)).
- *
- * This gives us a clean integer (row, col) key for every point on
- * the planet that's stable as the player moves around. To swap to a
- * hexagonal grid later, replace `latToRow`/`lonToCol`/`rowColToBounds`
- * with a flat-top or pointy-top axial-coords scheme — the rest of the
- * file (state, capture logic, rendering) does not have to change.
- * ====================================================================*/
+import {
+  HEX_SIZE_METERS,
+  HEX_AREA_M2,
+  latLonToHex,
+  hexCorners,
+  hexKey,
+  neighbourhood,
+} from './lib/grid';
+import { loadCells, saveCells, loadProfile, saveProfile } from './lib/storage';
+import { AntiCheat, MAX_ACCURACY_M, MIN_DWELL_MS } from './lib/anticheat';
+import { scoreboard, POINTS_FRESH, POINTS_TAKEOVER, formatArea } from './lib/score';
+import { captureSuccess, captureRejected, newCell, takeoverWarning } from './lib/feedback';
+import { CLOUD_ENABLED, subscribeCells, pushCapture } from './lib/cloud';
 
-const CELL_SIZE_METERS = 50;
-const RENDER_RADIUS_CELLS = 7;          // 15×15 = 225 cells around the player
-const MAX_ALLOWED_ACCURACY_METERS = 20; // anti-cheat: must be <= this to capture
+const PLAYER_COLORS = [
+  { name: 'Cobalt',  hex: '#1976D2' },
+  { name: 'Crimson', hex: '#E53935' },
+  { name: 'Forest',  hex: '#2E7D32' },
+  { name: 'Amber',   hex: '#FB8C00' },
+  { name: 'Violet',  hex: '#8E24AA' },
+  { name: 'Cyan',    hex: '#00ACC1' },
+];
 
-const METERS_PER_DEG_LAT = 111320;
-const LAT_STEP_DEG = CELL_SIZE_METERS / METERS_PER_DEG_LAT;
-
-function latToRow(lat) {
-  return Math.floor(lat / LAT_STEP_DEG);
-}
-
-function rowToCenterLat(row) {
-  return (row + 0.5) * LAT_STEP_DEG;
-}
-
-function lonStepForRow(row) {
-  const centerLat = rowToCenterLat(row);
-  return CELL_SIZE_METERS / (METERS_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180));
-}
-
-function lonToCol(lon, row) {
-  return Math.floor(lon / lonStepForRow(row));
-}
-
-function rowColToBounds(row, col) {
-  const minLat = row * LAT_STEP_DEG;
-  const maxLat = (row + 1) * LAT_STEP_DEG;
-  const lonStep = lonStepForRow(row);
-  const minLon = col * lonStep;
-  const maxLon = (col + 1) * lonStep;
-  return [
-    { latitude: minLat, longitude: minLon },
-    { latitude: minLat, longitude: maxLon },
-    { latitude: maxLat, longitude: maxLon },
-    { latitude: maxLat, longitude: minLon },
-  ];
-}
-
-const cellKey = (row, col) => `${row}|${col}`;
+const RENDER_RADIUS_HEX = 6;
 
 export default function App() {
+  /* ---- Location ---- */
   const [location, setLocation] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [capturedCells, setCapturedCells] = useState({}); // { "row|col": true }
-  const mapRef = useRef(null);
 
-  // --- 1. Location subscription ---------------------------------------
+  /* ---- Profile ---- */
+  const [profile, setProfile] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftColor, setDraftColor] = useState(PLAYER_COLORS[0]);
+
+  /* ---- Cells ---- */
+  const [cells, setCells] = useState({}); // { "q|r": { owner, color, capturedAt, score } }
+  const [showScoreboard, setShowScoreboard] = useState(false);
+
+  /* ---- Refs ---- */
+  const antiCheatRef = useRef(new AntiCheat());
+  const lastCellKeyRef = useRef(null);
+  const dwellTickRef = useRef(0);
+  const [, forceTick] = useState(0); // used to redraw the dwell countdown each second
+
+  /* ---- Boot: load profile + cells, request location ---- */
   useEffect(() => {
-    let subscription;
-
     (async () => {
+      const [p, c] = await Promise.all([loadProfile(), loadCells()]);
+      if (p?.name) setProfile(p);
+      else {
+        setShowProfileModal(true);
+      }
+      setCells(c);
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setErrorMsg('הרשאת מיקום נדחתה / Location permission denied.');
+        setErrorMsg('Location permission denied. The game needs your GPS.');
         return;
       }
+    })();
+  }, []);
 
-      subscription = await Location.watchPositionAsync(
+  /* ---- Location subscription (only after profile present) ---- */
+  useEffect(() => {
+    if (!profile) return;
+    let sub;
+    (async () => {
+      sub = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
           timeInterval: 1000,
           distanceInterval: 1,
         },
         (loc) => {
-          setLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
+          const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          setLocation(coords);
           setAccuracy(loc.coords.accuracy);
+          antiCheatRef.current.acceptFix(coords, loc.coords.accuracy, loc.timestamp);
         }
       );
     })();
+    return () => sub?.remove();
+  }, [profile]);
 
-    return () => {
-      subscription?.remove();
-    };
+  /* ---- Cloud sync (optional) ---- */
+  useEffect(() => {
+    if (!CLOUD_ENABLED) return;
+    const unsub = subscribeCells((remote) => {
+      // Last-write-wins on capturedAt
+      setCells((local) => {
+        const merged = { ...local };
+        for (const k of Object.keys(remote)) {
+          const r = remote[k];
+          const m = merged[k];
+          if (!m || (r.capturedAt ?? 0) > (m.capturedAt ?? 0)) merged[k] = r;
+        }
+        saveCells(merged);
+        return merged;
+      });
+    });
+    return unsub;
   }, []);
 
-  // --- 2. Which cell is the player in right now? ----------------------
-  const currentCell = useMemo(() => {
+  /* ---- Periodic tick for dwell countdown ---- */
+  useEffect(() => {
+    const id = setInterval(() => {
+      dwellTickRef.current++;
+      forceTick((n) => n + 1);
+    }, 250);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ---- Current hex ---- */
+  const currentHex = useMemo(() => {
     if (!location) return null;
-    const row = latToRow(location.latitude);
-    const col = lonToCol(location.longitude, row);
-    return { row, col };
+    return latLonToHex(location.latitude, location.longitude);
   }, [location]);
 
-  // --- 3. Visible cells around the player ------------------------------
-  const visibleCells = useMemo(() => {
-    if (!currentCell) return [];
-    const cells = [];
-    for (let dr = -RENDER_RADIUS_CELLS; dr <= RENDER_RADIUS_CELLS; dr++) {
-      for (let dc = -RENDER_RADIUS_CELLS; dc <= RENDER_RADIUS_CELLS; dc++) {
-        const row = currentCell.row + dr;
-        const col = currentCell.col + dc;
-        const key = cellKey(row, col);
-        cells.push({ row, col, key, captured: !!capturedCells[key] });
-      }
+  const currentKey = currentHex ? hexKey(currentHex.q, currentHex.r) : null;
+
+  /* ---- Notify anti-cheat of cell change + haptic on entry ---- */
+  useEffect(() => {
+    if (!currentKey) return;
+    if (lastCellKeyRef.current !== currentKey) {
+      antiCheatRef.current.noteCellChange(currentKey);
+      newCell();
+      const owner = cells[currentKey]?.owner;
+      if (owner && owner !== profile?.name) takeoverWarning();
+      lastCellKeyRef.current = currentKey;
     }
-    return cells;
-  }, [currentCell, capturedCells]);
+  }, [currentKey, cells, profile]);
 
-  // --- 4. Capture eligibility -----------------------------------------
-  const currentCellKey = currentCell ? cellKey(currentCell.row, currentCell.col) : null;
-  const accuracyOk = accuracy != null && accuracy <= MAX_ALLOWED_ACCURACY_METERS;
-  const alreadyOwned = currentCellKey != null && !!capturedCells[currentCellKey];
-  const canCapture = !!currentCell && accuracyOk && !alreadyOwned;
+  /* ---- Visible hexes ---- */
+  const visibleHexes = useMemo(() => {
+    if (!currentHex) return [];
+    return neighbourhood(currentHex.q, currentHex.r, RENDER_RADIUS_HEX);
+  }, [currentHex]);
 
-  const onCapture = () => {
-    if (!canCapture || !currentCell) return;
-    const key = cellKey(currentCell.row, currentCell.col);
-    setCapturedCells((prev) => ({ ...prev, [key]: true }));
-  };
+  /* ---- Capture eligibility ---- */
+  const acStatus = antiCheatRef.current.status();
+  const accuracyOk = accuracy != null && accuracy <= MAX_ACCURACY_M;
+  const dwellOk = antiCheatRef.current.dwellSatisfied();
+  const owned = currentKey ? cells[currentKey] : null;
+  const ownedByMe = owned?.owner === profile?.name;
+  const canCapture = !!currentHex && !!profile && accuracyOk && dwellOk && !acStatus.locked && !ownedByMe;
 
-  // --- 5. Render -------------------------------------------------------
+  const captureLabel = (() => {
+    if (!profile) return 'מגדיר פרופיל...';
+    if (!accuracyOk) return `GPS לא מספיק מדויק (${accuracy?.toFixed(0) ?? '?'} m)`;
+    if (acStatus.locked) return `נחסם זמנית (${acStatus.lockoutSecsLeft}s) — חשד לזיוף מיקום`;
+    if (!dwellOk) return `החזק במקום (${(acStatus.dwellMsLeft / 1000).toFixed(1)}s)`;
+    if (ownedByMe) return 'התא כבר שלך';
+    if (owned) return `כבוש ע"י ${owned.owner} — כבוש מחדש (+${POINTS_TAKEOVER})`;
+    return `כבוש את התא (+${POINTS_FRESH})`;
+  })();
+
+  /* ---- Capture handler ---- */
+  const onCapture = useCallback(async () => {
+    if (!canCapture || !currentHex || !profile) {
+      captureRejected();
+      return;
+    }
+    const k = hexKey(currentHex.q, currentHex.r);
+    const isTakeover = !!cells[k]?.owner && cells[k]?.owner !== profile.name;
+    const payload = {
+      owner: profile.name,
+      color: profile.color.hex,
+      capturedAt: Date.now(),
+      score: isTakeover ? POINTS_TAKEOVER : POINTS_FRESH,
+    };
+    const next = { ...cells, [k]: payload };
+    setCells(next);
+    await saveCells(next);
+    if (CLOUD_ENABLED) pushCapture(k, payload).catch(() => {});
+    captureSuccess();
+    // Reset dwell so the player has to leave + come back to recapture
+    antiCheatRef.current.cellEnteredAt = Date.now();
+  }, [canCapture, currentHex, profile, cells]);
+
+  /* ---- Profile setup ---- */
+  const onSaveProfile = useCallback(async () => {
+    const name = draftName.trim().slice(0, 20) || 'Player';
+    const p = { name, color: draftColor };
+    setProfile(p);
+    await saveProfile(p);
+    setShowProfileModal(false);
+  }, [draftName, draftColor]);
+
+  /* ---- Render ---- */
   if (errorMsg) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{errorMsg}</Text>
-      </View>
+      <View style={styles.center}><Text style={styles.error}>{errorMsg}</Text></View>
     );
   }
-  if (!location) {
+
+  if (!profile && !showProfileModal) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#1976D2" />
-        <Text style={styles.loadingText}>מאתר GPS...</Text>
+        <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={{
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.004,
-          longitudeDelta: 0.004,
-        }}
-        showsUserLocation={false}
-        showsCompass
-      >
-        {/* Grid */}
-        {visibleCells.map((cell) => (
-          <Polygon
-            key={cell.key}
-            coordinates={rowColToBounds(cell.row, cell.col)}
-            fillColor={
-              cell.captured
-                ? 'rgba(33, 150, 243, 0.45)'
-                : 'rgba(120, 120, 120, 0.18)'
-            }
-            strokeColor={
-              cell.captured
-                ? 'rgba(13, 71, 161, 0.9)'
-                : 'rgba(80, 80, 80, 0.5)'
-            }
-            strokeWidth={1}
-          />
-        ))}
+      {!location ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#1976D2" />
+          <Text style={styles.loadingText}>מאתר GPS...</Text>
+        </View>
+      ) : (
+        <MapView
+          style={styles.map}
+          initialRegion={{
+            latitude: location.latitude,
+            longitude: location.longitude,
+            latitudeDelta: 0.003,
+            longitudeDelta: 0.003,
+          }}
+          showsUserLocation={false}
+          showsCompass
+        >
+          {visibleHexes.map(({ q, r }) => {
+            const k = hexKey(q, r);
+            const c = cells[k];
+            const corners = hexCorners(q, r);
+            const isCurrent = currentKey === k;
+            const fill = c
+              ? hexAlpha(c.color, isCurrent ? 0.65 : 0.45)
+              : isCurrent
+              ? 'rgba(255, 235, 59, 0.30)'
+              : 'rgba(120, 120, 120, 0.16)';
+            const stroke = c
+              ? c.color
+              : isCurrent
+              ? 'rgba(255, 193, 7, 0.95)'
+              : 'rgba(80, 80, 80, 0.5)';
+            return (
+              <Polygon
+                key={k}
+                coordinates={corners}
+                fillColor={fill}
+                strokeColor={stroke}
+                strokeWidth={isCurrent ? 2 : 1}
+              />
+            );
+          })}
 
-        {/* Player marker */}
-        <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={styles.playerOuter}>
-            <View style={styles.playerInner} />
-          </View>
-        </Marker>
-      </MapView>
+          <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.playerOuter, { borderColor: profile?.color?.hex ?? '#FF5722' }]}>
+              <View style={[styles.playerInner, { backgroundColor: profile?.color?.hex ?? '#FF5722' }]} />
+            </View>
+          </Marker>
+        </MapView>
+      )}
 
       {/* HUD */}
       <View style={styles.hud}>
         <Text style={styles.hudLine}>
-          GPS Accuracy: {accuracy != null ? `${accuracy.toFixed(0)} m` : '—'} {accuracyOk ? '✓' : '⚠︎'}
+          GPS: {accuracy != null ? `${accuracy.toFixed(0)} m` : '—'} {accuracyOk ? '✓' : '⚠︎'}{'   '}
+          Hex: {currentHex ? `${currentHex.q},${currentHex.r}` : '—'}
         </Text>
         <Text style={styles.hudLine}>
-          Captured cells: {Object.keys(capturedCells).length}
+          Player: <Text style={{ color: profile?.color?.hex ?? '#fff' }}>{profile?.name ?? '...'}</Text>
         </Text>
-        {currentCell && (
-          <Text style={styles.hudLineMuted}>
-            cell ({currentCell.row}, {currentCell.col})
-          </Text>
-        )}
       </View>
+
+      {/* Score pill (tap → scoreboard) */}
+      <TouchableOpacity style={styles.scorePill} onPress={() => setShowScoreboard(true)}>
+        <Text style={styles.scorePillText}>
+          {scoreboardSummary(cells, profile?.name)}
+        </Text>
+      </TouchableOpacity>
 
       {/* Capture button */}
       <TouchableOpacity
-        style={[styles.captureBtn, !canCapture && styles.captureBtnDisabled]}
+        style={[
+          styles.captureBtn,
+          !canCapture && styles.captureBtnDisabled,
+          owned && !ownedByMe && canCapture && { backgroundColor: '#E53935' },
+        ]}
         onPress={onCapture}
         disabled={!canCapture}
         activeOpacity={0.85}
       >
-        <Text style={styles.captureBtnText}>
-          {canCapture
-            ? 'CAPTURE THIS CELL'
-            : !accuracyOk
-            ? `GPS too imprecise (${accuracy ? accuracy.toFixed(0) : '?'} m)`
-            : alreadyOwned
-            ? 'Already yours'
-            : 'Move to an unclaimed cell'}
-        </Text>
+        <Text style={styles.captureBtnText}>{captureLabel}</Text>
       </TouchableOpacity>
+
+      {/* Profile modal */}
+      <Modal visible={showProfileModal} transparent animationType="slide" onRequestClose={() => {}}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>הגדרת שחקן</Text>
+            <TextInput
+              value={draftName}
+              onChangeText={setDraftName}
+              placeholder="שם שחקן"
+              placeholderTextColor="#888"
+              style={styles.input}
+              maxLength={20}
+            />
+            <Text style={styles.modalSub}>בחר צבע:</Text>
+            <View style={styles.colorRow}>
+              {PLAYER_COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c.hex}
+                  onPress={() => setDraftColor(c)}
+                  style={[
+                    styles.colorSwatch,
+                    { backgroundColor: c.hex },
+                    draftColor.hex === c.hex && styles.colorSwatchActive,
+                  ]}
+                />
+              ))}
+            </View>
+            <TouchableOpacity style={styles.modalBtn} onPress={onSaveProfile}>
+              <Text style={styles.modalBtnText}>שמור והתחל</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Scoreboard modal */}
+      <Modal visible={showScoreboard} transparent animationType="fade" onRequestClose={() => setShowScoreboard(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowScoreboard(false)}>
+          <View style={styles.modalCard} pointerEvents="box-none">
+            <Text style={styles.modalTitle}>טבלת ניקוד</Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {scoreboard(cells).length === 0 ? (
+                <Text style={styles.modalSub}>אין עדיין כיבושים. צא החוצה ותתחיל!</Text>
+              ) : (
+                scoreboard(cells).map((row) => (
+                  <View key={row.owner} style={styles.scoreRow}>
+                    <View style={[styles.colorDot, { backgroundColor: row.color }]} />
+                    <Text style={[styles.scoreName, row.owner === profile?.name && { fontWeight: 'bold' }]}>
+                      {row.owner}
+                    </Text>
+                    <Text style={styles.scoreCells}>{row.cells} cells</Text>
+                    <Text style={styles.scoreArea}>{formatArea(row.areaKm2)}</Text>
+                    <Text style={styles.scorePoints}>{row.points} pts</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => setShowScoreboard(false)}>
+              <Text style={styles.modalBtnText}>סגור</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
+function scoreboardSummary(cells, me) {
+  const board = scoreboard(cells);
+  if (board.length === 0) return 'אין כיבושים — לחץ לטבלה';
+  const mine = board.find((s) => s.owner === me);
+  const top = board[0];
+  if (!mine) return `מוביל: ${top.owner} · ${top.points} pts`;
+  return `${mine.points} pts · ${mine.cells} cells · ${formatArea(mine.areaKm2)}`;
+}
+
+function hexAlpha(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#000' },
   map: { ...StyleSheet.absoluteFillObject },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   error: { color: '#d32f2f', padding: 20, textAlign: 'center', fontSize: 16 },
@@ -260,7 +404,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   hudLine: { color: '#fff', fontSize: 14, fontFamily: 'Courier', marginVertical: 1 },
-  hudLineMuted: { color: '#9aa0a6', fontSize: 12, fontFamily: 'Courier', marginTop: 4 },
+
+  scorePill: {
+    position: 'absolute',
+    top: 130,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  scorePillText: { color: '#fff', fontSize: 13, letterSpacing: 0.5 },
 
   captureBtn: {
     position: 'absolute',
@@ -271,29 +425,51 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 18,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
     elevation: 6,
   },
-  captureBtnDisabled: { backgroundColor: '#9e9e9e', shadowOpacity: 0 },
-  captureBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 },
+  captureBtnDisabled: { backgroundColor: '#666' },
+  captureBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15, letterSpacing: 0.5, textAlign: 'center' },
 
   playerOuter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 87, 34, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playerInner: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#FF5722',
-    borderColor: '#fff',
+    width: 28, height: 28, borderRadius: 14,
     borderWidth: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center', justifyContent: 'center',
   },
+  playerInner: { width: 14, height: 14, borderRadius: 7, borderColor: '#fff', borderWidth: 2 },
+
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center',
+  },
+  modalCard: {
+    width: '85%', backgroundColor: '#1c1c22', borderRadius: 16, padding: 22,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
+  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 14 },
+  modalSub: { color: '#bbb', fontSize: 14, textAlign: 'center', marginVertical: 8 },
+  input: {
+    backgroundColor: '#0d0d12', color: '#fff',
+    borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  colorRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 14 },
+  colorSwatch: {
+    width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent',
+  },
+  colorSwatchActive: { borderColor: '#fff', transform: [{ scale: 1.18 }] },
+  modalBtn: {
+    backgroundColor: '#1976D2', borderRadius: 10, paddingVertical: 14,
+    alignItems: 'center', marginTop: 8,
+  },
+  modalBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 },
+
+  scoreRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#333',
+  },
+  colorDot: { width: 14, height: 14, borderRadius: 7, marginRight: 10 },
+  scoreName: { color: '#fff', fontSize: 14, flex: 1 },
+  scoreCells: { color: '#aaa', fontSize: 12, width: 65, textAlign: 'right' },
+  scoreArea: { color: '#aaa', fontSize: 12, width: 90, textAlign: 'right' },
+  scorePoints: { color: '#1976D2', fontSize: 14, fontWeight: 'bold', width: 60, textAlign: 'right' },
 });
