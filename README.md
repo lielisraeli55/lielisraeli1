@@ -1,4 +1,58 @@
-# Air Touch — אפליקציית טלפון שנשלטת ביד
+# lielisraeli1
+
+ריפו עם שני פרויקטים:
+
+1. **Air Touch** — אפליקציית טלפון שנשלטת ביד דרך מצלמה (PWA)
+2. **AI Image Generator** — מחולל תמונות AI מאפס (DCGAN ב-Colab)
+
+---
+
+# 1. AI Image Generator — מחולל תמונות AI מאפס
+
+פרויקט שבונה AI ליצירת תמונות **מאפס** - בלי להשתמש במודלים מוכנים כמו Stable Diffusion או DALL-E.
+
+## איך להריץ?
+
+### דרך הטלפון (הכי פשוט):
+
+1. היכנס ל: https://colab.research.google.com
+2. לחץ על **File → Upload notebook**
+3. העלה את הקובץ `image_generator.ipynb` מהריפו הזה
+4. לחץ על **Runtime → Change runtime type → GPU** (T4 חינמי)
+5. לחץ על **Runtime → Run all**
+6. חכה 10-15 דקות וצפה בקסם
+
+### דרך GitHub ישירות:
+
+לחץ על הקובץ `image_generator.ipynb` בריפו → לחץ על **"Open in Colab"**
+
+## מה הפרויקט עושה?
+
+בונה רשת **DCGAN** (Deep Convolutional Generative Adversarial Network):
+
+- **Generator** - יוצר תמונות מרעש אקראי
+- **Discriminator** - שופט אם תמונה אמיתית או מזויפת
+- שתיהן לומדות יחד עד שה-Generator יוצר תמונות שנראות אמיתיות
+
+## דרישות
+
+- חשבון Google (לקולאב)
+- אפס התקנות במחשב/טלפון
+- אפס ידע מוקדם בתכנות
+
+## מה תקבל בסוף?
+
+- מודל מאומן שיודע ליצור ספרות בכתב יד
+- אפשרות לייצר אינסוף תמונות חדשות
+- קוד שאתה יכול להרחיב לסוגי תמונות אחרים (פרצופים, בגדים, וכו')
+
+## הרחבות אפשריות
+
+בתוך ה-Notebook יש הוראות איך להחליף את סוג התמונות (בגדים, צבע, גודל גדול יותר).
+
+---
+
+# 2. Air Touch — אפליקציית טלפון שנשלטת ביד
 
 מסך-בית וירטואלי שנשלט בתנועות יד דרך מצלמת הטלפון. מצביעים באצבע — סמן זוהר עוקב. צביטה (אגודל + אצבע) — האפליקציה מתחת לסמן נפתחת.
 
@@ -82,5 +136,6 @@ npx @bubblewrap/cli build
 │   ├── apple-touch-icon.png
 │   └── favicon-32.png
 ├── .nojekyll
+├── image_generator.ipynb   # Colab notebook (DCGAN)
 └── README.md
 ```
