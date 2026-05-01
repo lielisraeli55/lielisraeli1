@@ -1,20 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">קרבה לסאונד</string>
-    <string name="status_running">פעיל ברקע — מאזין לחיישן</string>
+    <string name="status_running">פעיל ברקע — מאזין לחיישנים</string>
     <string name="status_stopped">כבוי</string>
-    <string name="no_sensor">אין חיישן קרבה במכשיר הזה</string>
+    <string name="no_sensor">אין חיישני קרבה / מגנט במכשיר</string>
+    <string name="unavailable">לא זמין במכשיר זה</string>
+
+    <string name="proximity_label">חיישן קרבה</string>
+    <string name="metal_label">חיישן מתכת (מגנטומטר)</string>
+
     <string name="distance_fmt">%1$.2f cm</string>
-    <string name="sensor_info_fmt">טווח חיישן: %1$.2f cm · סף קרוב: &lt; %2$.2f cm</string>
+    <string name="proximity_info_fmt">טווח %1$.2f cm · סף &lt; %2$.2f cm</string>
+    <string name="metal_info">סף סטייה 30 μT מהבייסליין</string>
     <string name="events_fmt">אירועים: %1$d · מצב: %2$s</string>
     <string name="near">קרוב</string>
     <string name="far">רחוק</string>
+
+    <string name="magnetic_fmt">%1$.1f μT · Δ %2$.1f</string>
+    <string name="magnetic_baseline_fmt">בייסליין: %1$.1f μT</string>
+
     <string name="btn_start">הפעל ברקע</string>
     <string name="btn_stop">עצור</string>
-    <string name="hint">קרב יד לחיישן הקרבה (חזית הטלפון, ליד הרמקול העליון). אם המספר משתנה — החיישן עובד. אם הוא תקוע על אותו ערך, החיישן במכשיר זה לא פעיל מחוץ לשיחות.</string>
+    <string name="btn_test_sound">השמע סאונד לבדיקה</string>
+
+    <string name="hint">קרבת חפץ מתכתי (טלפון אחר, מפתח, מטבע) למסך הטלפון אמורה לקפיץ את ערך המגנטומטר ב-Δ&gt;30 μT ולהפעיל את הסאונד. אם רק חיישן הקרבה לא משתנה אצלך — זה ידוע במכשירי סמסונג מסוימים שנועלים אותו לשימוש מערכת בלבד; המגנטומטר עוקף את זה.</string>
+
     <string name="notif_title">קרבה לסאונד פעיל</string>
-    <string name="notif_text">מאזין לחיישן הקרבה ברקע</string>
+    <string name="notif_text">מאזין לחיישני קרבה ומגנט ברקע</string>
     <string name="notif_stop">עצור</string>
-    <string name="notif_channel_name">שירות חיישן קרבה</string>
+    <string name="notif_channel_name">שירות חיישני קרבה</string>
     <string name="notif_channel_desc">התראה קבועה כל זמן שהאפליקציה רצה ברקע</string>
 </resources>

@@ -19,14 +19,31 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
+/**
+ * Foreground service that fires the sound whenever EITHER:
+ *   - The proximity sensor crosses near, OR
+ *   - The magnetometer detects a sudden field change (metal / another phone close by).
+ *
+ * Many newer Samsung / Xiaomi phones have a "virtual" proximity sensor that
+ * only reports during phone calls and is silent in regular apps — so the
+ * magnetometer path is the actual fallback that makes detection work.
+ */
 class ProximityService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var proximitySensor: Sensor? = null
+    private var magneticSensor: Sensor? = null
     private var nearThreshold: Float = 5f
-    private var isNear: Boolean = false
+    private var proximityNear: Boolean = false
+    private var metalNear: Boolean = false
     private var player: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+
+    private val metalDetector = MagneticDetector(
+        thresholdMicroTesla = 30f,
+        onNear = { metalNear = true; refreshTrigger() },
+        onFar = { metalNear = false; refreshTrigger() },
+    )
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -34,9 +51,9 @@ class ProximityService : Service(), SensorEventListener {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+        magneticSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         proximitySensor?.let { nearThreshold = nearThresholdFor(it) }
 
-        // Hold a partial wake-lock so the CPU keeps delivering sensor events with the screen off.
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ProximitySound:sensor").apply {
             setReferenceCounted(false)
@@ -52,17 +69,24 @@ class ProximityService : Service(), SensorEventListener {
 
         startInForeground()
 
-        if (proximitySensor == null) {
+        if (proximitySensor == null && magneticSensor == null) {
+            // Nothing to listen to.
             stopSelf()
             return START_NOT_STICKY
         }
-        sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL)
+        proximitySensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        magneticSensor?.let {
+            sensorManager.registerListener(metalDetector, it, SensorManager.SENSOR_DELAY_UI)
+        }
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
         sensorManager.unregisterListener(this)
+        sensorManager.unregisterListener(metalDetector)
         stopPlayer()
         try { wakeLock?.takeIf { it.isHeld }?.release() } catch (_: Throwable) {}
         wakeLock = null
@@ -71,17 +95,20 @@ class ProximityService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_PROXIMITY) return
         val distance = event.values[0]
-        val nowNear = distance < nearThreshold
-        if (nowNear && !isNear) {
-            isNear = true
-            playSound()
-        } else if (!nowNear && isNear) {
-            isNear = false
-            stopPlayer()
-        }
+        proximityNear = distance < nearThreshold
+        refreshTrigger()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
+
+    private fun refreshTrigger() {
+        val shouldPlay = proximityNear || metalNear
+        if (shouldPlay && player == null) {
+            playSound()
+        } else if (!shouldPlay && player != null) {
+            stopPlayer()
+        }
+    }
 
     private fun playSound() {
         stopPlayer()
@@ -161,7 +188,7 @@ class ProximityService : Service(), SensorEventListener {
         const val ACTION_STOP = "com.lielisraeli.proximitysound.ACTION_STOP"
         private const val CHANNEL_ID = "proximity_sound_channel"
         private const val NOTIF_ID = 1001
-        private const val WAKE_LOCK_TIMEOUT_MS = 24L * 60L * 60L * 1000L // 24h hard cap
+        private const val WAKE_LOCK_TIMEOUT_MS = 24L * 60L * 60L * 1000L
 
         fun start(context: Context) {
             val intent = Intent(context, ProximityService::class.java)
