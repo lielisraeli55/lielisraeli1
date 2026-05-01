@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">קרבה לסאונד</string>
-    <string name="status_far">רחוק</string>
-    <string name="status_near">קרוב — מנגן</string>
+    <string name="status_running">פעיל ברקע — מאזין לחיישן</string>
+    <string name="status_stopped">כבוי</string>
     <string name="no_sensor">אין חיישן קרבה במכשיר הזה</string>
-    <string name="distance_fmt">%1$.2f cm</string>
     <string name="max_range_fmt">טווח חיישן: %1$.2f cm</string>
-    <string name="hint">קרב את היד או חפץ אל החיישן בחזית הטלפון (ליד הרמקול העליון).</string>
+    <string name="btn_start">הפעל ברקע</string>
+    <string name="btn_stop">עצור</string>
+    <string name="hint">לחץ "הפעל ברקע" — האפליקציה תפעל גם כשהיא סגורה. קרב יד או חפץ לחיישן הקרבה בחזית הטלפון (ליד הרמקול העליון) כדי להשמיע את הסאונד.</string>
+    <string name="notif_title">קרבה לסאונד פעיל</string>
+    <string name="notif_text">מאזין לחיישן הקרבה ברקע</string>
+    <string name="notif_stop">עצור</string>
+    <string name="notif_channel_name">שירות חיישן קרבה</string>
+    <string name="notif_channel_desc">התראה קבועה כל זמן שהאפליקציה רצה ברקע</string>
 </resources>
