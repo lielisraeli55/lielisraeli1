@@ -13,13 +13,13 @@
         android:layout_height="wrap_content"
         android:text="@string/app_name"
         android:textColor="#FFFFFF"
-        android:textSize="28sp"
+        android:textSize="26sp"
         android:textStyle="bold"
         android:gravity="center"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="48dp" />
+        android:layout_marginTop="32dp" />
 
     <TextView
         android:id="@+id/statusText"
@@ -27,25 +27,54 @@
         android:layout_height="wrap_content"
         android:text="@string/status_stopped"
         android:textColor="#80E27E"
-        android:textSize="22sp"
+        android:textSize="18sp"
         android:gravity="center"
         app:layout_constraintTop_toBottomOf="@id/titleText"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="48dp" />
+        android:layout_marginTop="20dp" />
+
+    <TextView
+        android:id="@+id/distanceText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="—"
+        android:textColor="#FFFFFF"
+        android:textSize="56sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/statusText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="32dp" />
+
+    <TextView
+        android:id="@+id/eventsText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#BDBDBD"
+        android:textSize="14sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/distanceText"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp" />
 
     <TextView
         android:id="@+id/maxRangeText"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:text=""
-        android:textColor="#BDBDBD"
-        android:textSize="14sp"
+        android:textColor="#9E9E9E"
+        android:textSize="13sp"
         android:gravity="center"
-        app:layout_constraintTop_toBottomOf="@id/statusText"
+        app:layout_constraintTop_toBottomOf="@id/eventsText"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="12dp" />
+        android:layout_marginTop="8dp" />
 
     <Button
         android:id="@+id/toggleButton"
@@ -58,7 +87,7 @@
         app:layout_constraintTop_toBottomOf="@id/maxRangeText"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="40dp" />
+        android:layout_marginTop="32dp" />
 
     <TextView
         android:id="@+id/hintText"
@@ -66,11 +95,11 @@
         android:layout_height="wrap_content"
         android:text="@string/hint"
         android:textColor="#9E9E9E"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:gravity="center"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="48dp" />
+        android:layout_marginBottom="32dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -34,9 +34,7 @@ class ProximityService : Service(), SensorEventListener {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        proximitySensor?.let {
-            nearThreshold = minOf(1.5f, it.maximumRange * 0.5f)
-        }
+        proximitySensor?.let { nearThreshold = nearThresholdFor(it) }
 
         // Hold a partial wake-lock so the CPU keeps delivering sensor events with the screen off.
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager

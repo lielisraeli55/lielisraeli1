@@ -4,10 +4,14 @@
     <string name="status_running">פעיל ברקע — מאזין לחיישן</string>
     <string name="status_stopped">כבוי</string>
     <string name="no_sensor">אין חיישן קרבה במכשיר הזה</string>
-    <string name="max_range_fmt">טווח חיישן: %1$.2f cm</string>
+    <string name="distance_fmt">%1$.2f cm</string>
+    <string name="sensor_info_fmt">טווח חיישן: %1$.2f cm · סף קרוב: &lt; %2$.2f cm</string>
+    <string name="events_fmt">אירועים: %1$d · מצב: %2$s</string>
+    <string name="near">קרוב</string>
+    <string name="far">רחוק</string>
     <string name="btn_start">הפעל ברקע</string>
     <string name="btn_stop">עצור</string>
-    <string name="hint">לחץ "הפעל ברקע" — האפליקציה תפעל גם כשהיא סגורה. קרב יד או חפץ לחיישן הקרבה בחזית הטלפון (ליד הרמקול העליון) כדי להשמיע את הסאונד.</string>
+    <string name="hint">קרב יד לחיישן הקרבה (חזית הטלפון, ליד הרמקול העליון). אם המספר משתנה — החיישן עובד. אם הוא תקוע על אותו ערך, החיישן במכשיר זה לא פעיל מחוץ לשיחות.</string>
     <string name="notif_title">קרבה לסאונד פעיל</string>
     <string name="notif_text">מאזין לחיישן הקרבה ברקע</string>
     <string name="notif_stop">עצור</string>

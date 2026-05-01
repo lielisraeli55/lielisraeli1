@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
@@ -12,9 +14,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.lielisraeli.proximitysound.databinding.ActivityMainBinding
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var sensorManager: SensorManager
+    private var proximitySensor: Sensor? = null
+    private var nearThreshold: Float = 5f
+    private var eventCount: Int = 0
 
     private val notifPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -28,14 +34,19 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        if (sensor == null) {
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+        if (proximitySensor == null) {
             binding.statusText.text = getString(R.string.no_sensor)
             binding.toggleButton.isEnabled = false
             return
         }
-        binding.maxRangeText.text = getString(R.string.max_range_fmt, sensor.maximumRange)
+        nearThreshold = nearThresholdFor(proximitySensor!!)
+        binding.maxRangeText.text = getString(
+            R.string.sensor_info_fmt,
+            proximitySensor!!.maximumRange,
+            nearThreshold
+        )
 
         binding.toggleButton.setOnClickListener { toggle() }
         renderState()
@@ -44,7 +55,33 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         renderState()
+        // Live-listen while the activity is visible, so the user can see the sensor
+        // responding even before enabling the background service.
+        proximitySensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
     }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type != Sensor.TYPE_PROXIMITY) return
+        val distance = event.values[0]
+        eventCount++
+        val isNear = distance < nearThreshold
+        binding.distanceText.text = getString(R.string.distance_fmt, distance)
+        binding.distanceText.setTextColor(if (isNear) 0xFFFF5252.toInt() else 0xFFFFFFFF.toInt())
+        binding.eventsText.text = getString(
+            R.string.events_fmt,
+            eventCount,
+            if (isNear) getString(R.string.near) else getString(R.string.far)
+        )
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
 
     private fun toggle() {
         if (prefs().getBoolean(KEY_ENABLED, false)) {
