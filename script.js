@@ -1,5 +1,48 @@
 // === שגיא ישראלי · interactions ===
 
+// Stale-bust: if the browser is rendering the old Air Touch HTML (still in
+// the HTTP cache after the site was replaced), wipe every service worker
+// and cache, then reload with a cache-buster so the next response is fresh.
+(function () {
+  var onOldHtml =
+      document.body && document.body.classList && document.body.classList.contains('air-body') ||
+      !!document.getElementById('apps-grid') ||
+      !!document.getElementById('cam-preview') ||
+      !document.querySelector('.hero__title');
+
+  function nuke() {
+    var tasks = [];
+    try {
+      if ('serviceWorker' in navigator) {
+        tasks.push(
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }).catch(function () {})
+        );
+      }
+      if (window.caches && caches.keys) {
+        tasks.push(
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }).catch(function () {})
+        );
+      }
+    } catch (_) {}
+    return Promise.all(tasks);
+  }
+
+  if (onOldHtml) {
+    nuke().then(function () {
+      var u = location.pathname.replace(/index\.html$/, '') + '?v=' + Date.now();
+      location.replace(u);
+    });
+    return;
+  }
+
+  // On the right HTML — still proactively clean any stale registrations / caches.
+  nuke();
+})();
+
 (function () {
   'use strict';
 
