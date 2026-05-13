@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Air Touch</title>
+    <meta name="description" content="שליטה במסך הטלפון בתנועות יד דרך המצלמה">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#00ff88">
+    <meta name="background-color" content="#04060a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Air Touch">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="air-body">
+    <div class="top-bar">
+        <h1>שליטה ביד</h1>
+        <div class="indicators">
+            <div class="indicator" id="ind-cam"><span class="dot"></span>מצלמה</div>
+            <div class="indicator" id="ind-hand"><span class="dot"></span>יד</div>
+            <div class="indicator" id="ind-pinch"><span class="dot"></span>צביטה</div>
+        </div>
+    </div>
+
+    <div class="instructions" id="instructions">
+        <p>הצבע באצבע — הסמן יזוז. צבוט (אגודל + אצבע) — נפתחת אפליקציה.</p>
+    </div>
+
+    <div class="apps-grid" id="apps-grid">
+        <!-- apps injected by JS -->
+    </div>
+
+    <div class="footer-bar">
+        <span>אפליקציות שנפתחו: <strong id="open-count">0</strong></span>
+        <button id="install-btn" class="btn-install hidden">התקן</button>
+        <button id="start-btn" class="btn-start">הפעל מצלמה</button>
+        <button id="stop-btn" class="btn-stop hidden">עצור</button>
+    </div>
+
+    <!-- Camera mini preview -->
+    <div class="cam-preview" id="cam-preview">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="cam-canvas"></canvas>
+        <div class="cam-label">CAM</div>
+    </div>
+
+    <!-- The pointer -->
+    <div class="pointer" id="pointer">
+        <div class="pointer-ring"></div>
+        <div class="pointer-dot"></div>
+    </div>
+
+    <!-- App modal -->
+    <div class="modal-backdrop hidden" id="modal-backdrop">
+        <div class="modal" id="modal">
+            <div class="modal-icon" id="modal-icon">📱</div>
+            <h2 id="modal-title">אפליקציה</h2>
+            <p id="modal-content">תוכן האפליקציה...</p>
+            <button class="modal-close" id="modal-close">סגור</button>
+        </div>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="script.js"></script>
+</body>
+</html>
