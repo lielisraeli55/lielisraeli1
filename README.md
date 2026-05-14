@@ -1,38 +1,17 @@
-# lielisraeli1 — אוסף אתרים ואפליקציות
+# שגיא ישראלי — פרופיל שחקן
 
-הריפו מארח כמה פרויקטים נפרדים שמפורסמים דרך GitHub Pages.
+אתר פרופיל מעמיק על השחקן **שגיא ישראלי** — קשר התקפי בית״ר ירושלים, מס׳ 28, בהשאלה לעירוני מודיעין.
 
-## 🟡 Sagi Israeli — פרופיל שחקן
+🔗 **חי בכתובת:** https://lielisraeli55.github.io/lielisraeli1/
 
-האתר הראשי. פרופיל מעמיק על השחקן שגיא ישראלי (קשר התקפי, בית״ר ירושלים, מס׳ 28, בהשאלה לעירוני מודיעין). ביוגרפיה, סטטיסטיקה, ציר זמן קריירה, משחקים בולטים והעברות.
+## מה יש באתר
 
-- כתובת: `https://lielisraeli55.github.io/lielisraeli1/`
-- קבצים: `index.html`, `styles.css`, `script.js`
-
-## ✋ Air Touch — שליטה במסך הטלפון בתנועות יד
-
-PWA שמאפשרת לשלוט במסך הטלפון עם המצלמה — הצבעה באצבע מזיזה סמן, צביטה (אגודל + אצבע) פותחת אפליקציה. מבוסס MediaPipe Hands.
-
-- כתובת: `https://lielisraeli55.github.io/lielisraeli1/air-touch/`
-- מותקנת כ-PWA על מסך הבית, עובדת offline.
-
-### התקנה כאפליקציה
-1. פתח בכרום בטלפון: `https://lielisraeli55.github.io/lielisraeli1/air-touch/`
-2. ⋮ → **"Add to Home screen"** / **"Install app"** (או באייפון: שתף → "הוסף למסך הבית")
-
-### בניית APK דרך PWA Builder
-1. פתח `https://www.pwabuilder.com/`
-2. הדבק: `https://lielisraeli55.github.io/lielisraeli1/air-touch/`
-3. **Package For Stores** → **Android** → **Download**
-4. תקבל `app-release-signed.apk` להתקנה ישירה.
-
-### איך זה עובד טכנית
-- **MediaPipe Hands** — 21 נקודות ציון ליד בזמן אמת
-- **Index fingertip → cursor** עם השתקפות אופקית (מצלמה קדמית)
-- **EMA smoothing** alpha=0.3 על תנועת הסמן
-- **Pinch detection** — יחס מרחק אגודל-אצבע לגודל היד, hysteresis 0.40/0.55
-- **Service worker** — cache-first ל-MediaPipe, network-first עם fallback לשאר
-- כל הנתונים נשארים מקומית במכשיר
+- **Hero** — שם השחקן בטיפוגרפיה גדולה, מס׳ חולצה ענק כרקע, פרטי יסוד וציטוט.
+- **סיפור** — ביוגרפיה: מחלקת הנוער של בית״ר, עליה לבוגרים ב-2024/25, הארכת חוזה עד 2028, השאלה למודיעין.
+- **מספרים** — הופעות, שערים, בישולים, דקות וכרטיסים, חלוקה לפי מסגרת ופרופיל יכולת.
+- **קריירה** — ציר זמן עם 6 ציוני דרך.
+- **משחקים בולטים** — 4 כרטיסי משחק מפורטים (כולל הצמד מול מכבי יפו).
+- **שוק ההעברות** — קידום פנימי, הארכת חוזה, השאלה ועוד.
 
 ## מבנה הריפו
 
@@ -41,16 +20,25 @@ PWA שמאפשרת לשלוט במסך הטלפון עם המצלמה — הצב
 ├── index.html              ← פרופיל שגיא ישראלי
 ├── styles.css
 ├── script.js
-├── air-touch/              ← Air Touch PWA
-│   ├── index.html
-│   ├── style.css
-│   ├── script.js
-│   ├── manifest.webmanifest
-│   ├── service-worker.js
-│   └── icons/
+├── service-worker.js       ← tombstone SW (מנקה cache ישן)
 ├── territory-game/         ← פרויקט נפרד
 ├── native/                 ← פרויקט Android נפרד
 ├── voice/                  ← פרויקט Android נפרד
 ├── .nojekyll
 └── README.md
 ```
+
+## טכני
+
+- Pure HTML/CSS/JS — ללא שלב build
+- RTL מלא, ערכת צבעים של בית״ר (שחור + זהב)
+- Google Fonts: Frank Ruhl Libre + Heebo + Anton
+- IntersectionObserver לאנימציות counters ו-scroll reveal
+- Parallax עדין על מס׳ 28 ברקע ה-Hero
+
+## מקורות מידע
+
+- football.org.il — דף שחקן 132446
+- אתר רשמי בית״ר ירושלים — דף שחקן + הודעת הארכת חוזה (29.1.2025)
+- ONE (מזהה 68332), sport5 (44047), sport1
+- Transfermarkt, Sofascore
