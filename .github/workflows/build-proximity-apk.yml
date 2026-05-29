@@ -1,0 +1,77 @@
+name: Build Proximity-Sound APK
+
+on:
+  push:
+    branches: ['claude/hand-tracking-camera-qY4kI', 'claude/hand-tracking-camera-iKo1K']
+    paths:
+      - 'proximity-sound/**'
+      - '.github/workflows/build-proximity-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate Gradle wrapper
+        working-directory: proximity-sound
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Build debug APK
+        working-directory: proximity-sound
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp proximity-sound/app/build/outputs/apk/debug/app-debug.apk dist/proximity-sound-${{ github.run_number }}.apk
+          cp proximity-sound/app/build/outputs/apk/debug/app-debug.apk dist/proximity-sound-latest.apk
+          ls -lh dist/
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proximity-sound-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish APK as GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: proximity-${{ github.run_number }}
+          name: Proximity-Sound APK ${{ github.run_number }}
+          files: dist/proximity-sound-${{ github.run_number }}.apk
+          generate_release_notes: false
+          body: |
+            APK של אפליקציית "קרבה לסאונד" — משמיעה סאונד כשמתקרבים לחיישן הקרבה של הטלפון.
+
+            הסאונד שמופעל הוא הקובץ `proximity-sound/app/src/main/res/raw/sound.wav`.
+            כדי להחליף לסאונד שלך:
+            1. שמור קובץ MP3/WAV בשם `sound.mp3` או `sound.wav`
+            2. החלף את הקובץ ב-`proximity-sound/app/src/main/res/raw/`
+            3. דחוף ל-branch — Workflow יבנה APK חדש אוטומטית
